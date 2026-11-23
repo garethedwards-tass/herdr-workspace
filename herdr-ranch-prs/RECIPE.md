@@ -95,7 +95,8 @@ One template per mode (segmented), a monospace textarea, the placeholders as chi
 - `mods/herdr-ranch-prs/main.js` (the list), `data.js` (`gh` calls, grouping, search, the review prompt), `detail.js` (the page), `files-tab.js` (the Files tab), `commits-tab.js` (the Commits tab), `diff.js` (patches parsed into hunks and split rows, cut to a number of lines), `stacks.js` (stacks, their blocker and what Start agent gets for one).
 - Shared with herdr-ranch-issues, identical copies of the repository's `shared/`: `links.js` (the space link, settings, split, icons, initials and GitHub avatars, segmented control, text sizes), `page-kit.js` (the page's header, timeline, sidebar, tabs and footer), `jira-client.js` (Jira summaries for linked keys), `link-dialog.js`, `agent-dialog.js` (Start agent and Prompts), `prompts.js` (modes, default templates, placeholders, `.herdr/prompts.md`).
 - The dialogs are this mod too: it opens itself as an overlay with `props.dialog` (`"link"` or `"agent"`), like the cog's popup (`props.settings`), and renders only that.
-- `mod.json`: `place: none`, a window overlay (80%), `button: { label: "PRs", icon: "pr.svg", opens: "panel", order: 10 }` for mod-buttons.
+- `mod.json`: `place: none`, a window overlay (80%), `button: { label: "PRs", icon: "pr.svg", opens: "panel", order: 10 }` for mod-buttons, and a `link_handlers` URL rule for `github.com/<owner>/<repo>/pull/<n>` (see **Terminal links**).
+- `mods/herdr-ranch-prs/link.js`: `handleLink` for a clicked pull request link.
 - herdr: `spaces`, `shared`, `setShared`, `theme`, `props`, `settings`, `exec`, `readTextFile`, `writeTextFile`, `appHome`, `knownAgents`, `run`, `notify`, `openOverlay`, `closeOverlay`, `nextCommand`.
 - Programs: `gh`, `git`, `curl` for the avatars; `security`, `secret-tool` or `powershell` for Jira summaries of linked keys; `open`, `xdg-open` or `rundll32` for the browser.
 
@@ -125,5 +126,9 @@ One template per mode (segmented), a monospace textarea, the placeholders as chi
 ## Linked
 
 Through `xref.js` (shared with History and Issues): History and Issues open a pull request here by number (`ranch-open` shared state; one of another repository, or with no repository for the space, opens on GitHub). On the page, Development's issues of this repository and Jira keys open in Issues; a commit in the Commits tab has **History**, opening it in the History panel when the repository is checked out.
+
+### Terminal links
+
+Ctrl/Cmd-click on `https://github.com/<owner>/<repo>/pull/<n>` in a terminal (also with `/files`, `/commits`, `?query` or `#discussion_r…` after the number; `parseGithubLink` in `xref.js`) opens that pull request's page here, as a request from another mod would (`openIn`: the panel, else its tab, else a new tab). Only when the clicked terminal is in the shown space, the link is of that space's repository (its Link space entry, else the folder's remote), and `gh api repos/<repo>/pulls/<n>` answers on the space's machine. Anything else (another repository, gh signed out or without access, an unknown URL shape) returns `pass`, so Herdr opens it in the browser.
 
 Each Jira key in Development has a **Jira ↗** at the end of its row (the row itself opens Issues). An open commit in the Commits tab shows **Linked**: the linked Jira project's keys in its message, each a button that opens Issues and a **Jira ↗**.

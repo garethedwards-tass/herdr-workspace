@@ -12,6 +12,7 @@ import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, set
 // ranch: what Herdr Ranch adds, and its git reads.
 import { dialogFor, start, spaceMenu, spaceTail, moreRow, looseRow, terminalRows, foldChevron, isOpen, worktreeSpaceRow, newSpaceMenu, programIcon, foldAllButton, byAccount, accountFilterRow } from "./extras.js";
 import { writeIcons } from "./actions.js";
+import { checkUpstream } from "./upstream.js"; // ranch: say when Herdr changes the mod this copies
 import { agentPlaces, PLACES } from "./agents-at.js";
 import { probe, worktreesWithWork, arrange } from "./git.js";
 // Places looked at together (two git runs each). All at once, a few hundred spaces
@@ -79,6 +80,7 @@ export default class Spaces extends View {
     this.dialog = dialogFor(props(), cx);
     if (this.dialog) return;
     start(this, cx);
+    checkUpstream("spaces", "0.1.17", "cfc2ba37fc63b97ab6aad8e386ba39596c88fdb1472fcdbc40abada9c74c6c12"); // ranch: the copy's source
     writeIcons().then(() => cx.notify()).catch(() => null);
     this.git = {}; // where() -> { name, branch, ahead, behind, repo, linked }, null: not a repo
     this.checked = {}; // where() -> when it was last looked at

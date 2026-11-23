@@ -153,7 +153,7 @@ export default class SpaceIssues extends View {
     const byKey = new Map(this.issues.map((x) => [x.key, x]));
     const shown = this.items().items.filter((x) => !x.group).map((x) => byKey.get(x.data.key)).filter(Boolean);
     // One the list doesn't show (asked for by another mod) opens alone.
-    const list = shown.some((x) => x.key === i.key) ? shown : [i];
+    const list = shown.includes(i) ? shown : [i];
     const kids = {};
     for (const x of this.issues) if (x.fields.parent) (kids[x.fields.parent.key] ??= []).push({ key: x.key, summary: x.fields.summary, done: false });
     openPageDialog("herdr-ranch-issues", { key: i.key, list: list.length ? list : [i], repo: this.repo, github: this.github, kids, page: this.pages.get(pageKey(i)) ?? null });
@@ -267,7 +267,8 @@ export default class SpaceIssues extends View {
     else notify({ title: `No tracker linked here has ${w.key}`, body: "Link a Jira project, a Linear team or a GitHub repository with Link space.", level: "info", timeout: 5000 });
   }
   issueFor(w) {
-    const key = w.key, listed = this.issues.find((x) => x.key === key);
+    // A GitHub "#12" of another repository (a clicked link, link.js) isn't this list's #12.
+    const key = w.key, listed = this.issues.find((x) => x.key === key && (!w.github || !x.repo || sameRepo(x.repo, w.github)));
     if (listed) return listed;
     if (key.startsWith("#")) {
       const repo = w.github ?? this.projects.find(isGithub)?.repo ?? this.github;

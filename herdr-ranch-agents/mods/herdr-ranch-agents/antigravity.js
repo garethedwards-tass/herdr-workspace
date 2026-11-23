@@ -225,14 +225,16 @@ export async function restartAgy(t, session, cx) {
   // From here on the terminal is touched: look before each key.
   const screen = await read(t);
   if (busy(screen)) return "It's working: try again when it's done.";
-  // An empty prompt can show a placeholder ("Auto mode: …"): a typed x shows alone only when
-  // nothing was drafted.
-  await keys(t, ["x"]);
-  let typed = null;
-  for (let i = 0; i < 12 && typed !== "x"; i++) { await cx.sleep(200); typed = agyPrompt(await read(t)); }
-  await keys(t, ["backspace"]);
-  if (typed !== "x") return "It has an unsent message in its prompt: send or clear it first.";
-  await cx.sleep(200);
+  // A bare ">" is an empty prompt: nothing to type. Text after it is a draft or agy's placeholder
+  // ("Auto mode: …"), which look alike on screen: a typed x shows alone only when nothing was drafted.
+  if (agyPrompt(screen) !== "") {
+    await keys(t, ["x"]);
+    let typed = null;
+    for (let i = 0; i < 12 && typed !== "x"; i++) { await cx.sleep(200); typed = agyPrompt(await read(t)); }
+    await keys(t, ["backspace"]);
+    if (typed !== "x") return "It has an unsent message in its prompt: send or clear it first.";
+    await cx.sleep(200);
+  }
   await keys(t, ["ctrl+d"]);
   await cx.sleep(300);
   await keys(t, ["ctrl+d"]);

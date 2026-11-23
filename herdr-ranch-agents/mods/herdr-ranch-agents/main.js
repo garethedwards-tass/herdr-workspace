@@ -8,6 +8,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { agents, terminals, panes, focused, spaces, run, theme, shared, setShared, setAgentOrder, openOverlay, closeOverlay, props, window, layout } from "herdr";
 // ranch: Claude Code sessions: the chip, the popup, tasks and subagents.
 import { publishPlaces } from "./places.js";
+import { checkUpstream } from "./upstream.js"; // ranch: say when Herdr changes the mod this copies
 import { refreshWorktrees, worktreeMark } from "./worktree.js";
 import { start, statsChip, claudeRows, statsView, statsMenu, liveAgents, quietMark, openAgentMenu, byAccount, accountFilterRow, accountFilterOf } from "./extras.js";
 
@@ -104,6 +105,7 @@ export default class Agents extends View {
   init(_props, cx) {
     if (props()?.sortMenu || props()?.stats || props()?.menu) return; // ranch: the stats popup and the agent menu are copies of their own
     start(this, cx); // ranch
+    checkUpstream("agents", "0.1.17", "ba9aedf9a3c6f5180800dab7318ee3193bef44a6aa40fe2381df6fd1a6ecba4f"); // ranch: the copy's source
     cx.timer.every(3000, () => publishPlaces(this)); // ranch: agents' folders, for the Spaces list
     // ranch: which agents work in a linked worktree (worktree.js), for the marker on their rows.
     const wt = (cx) => { if (this.wtBusy) return; this.wtBusy = true; cx.spawn(async (cx) => { try { if (await refreshWorktrees(this, agents())) cx.notify(); } catch { /* next time */ } this.wtBusy = false; }); };

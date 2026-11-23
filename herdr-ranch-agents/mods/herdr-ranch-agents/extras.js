@@ -5,12 +5,13 @@
 
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { openOverlay, closeOverlay, agents, terminals, home, shared, setShared, panes, spaces, run, notify, hc } from "herdr";
+import { openOverlay, closeOverlay, agents, terminals, home, shared, setShared, panes, spaces, run, notify, hc, setBadge, checking } from "herdr";
 import { bringBack } from "./revive.js";
 import { accounts, accountOf, defaultLabel } from "./accounts.js";
 import { worktreeProps, worktreeLines, WORKTREE_H } from "./worktree.js";
 import { isCodex, refreshCodex, codexSnapshot, codexModel, codexShort, restartCodexAgent } from "./codex.js";
 import { isAgy, refreshAgy, agySnapshot, agyShort, restartAgyAgent } from "./antigravity.js";
+import { loadPrices, priceFor, costOf } from "./prices.js";
 import { liveSessions, configDirs, pickSession, projectDir, firstRead, readSince, subagents, apply, totals, windowOf, tokens, taskList } from "./claude.js";
 
 export const MOD = "herdr-ranch-agents";
@@ -76,6 +77,23 @@ export function start(v, cx) {
   };
   tick(cx);
   cx.timer.every(TICK, tick);
+  // Your prices for Codex and Antigravity models (prices.js), read again every minute.
+  v.prices = {};
+  const prices = () => { loadPrices().then((p) => { v.prices = p; }).catch(() => null); };
+  prices();
+  cx.timer.every(60000, prices);
+  // The Dock icon's badge: how many agents need you (Herdr sets none itself).
+  if (!checking()) {
+    const badge = () => { const text = badgeText(agents()); if (text !== v.badge) { v.badge = text; setBadge(text); } };
+    badge();
+    cx.timer.every(1000, badge);
+  }
+}
+
+// The Dock badge's text: the agents under "Needs you" (blocked), or null for none.
+export function badgeText(list) {
+  const n = (list ?? []).filter((a) => a.status === "blocked").length;
+  return n ? String(n) : null;
 }
 
 // A terminal's foreground process (hc get), kept while it's one of the candidates' processes.
@@ -161,6 +179,8 @@ const level = (t, p) => (p >= 85 ? t.ansi1 : p >= 60 ? t.ansi3 : t.ansi2);
 export function openAgentMenu(v, a) {
   const c = v.claude?.get(a.address), x = v.codex?.get(a.address), g = v.agy?.get(a.address);
   const s = c?.st.context ? snapshot(c) : x ? codexSnapshot(x, (a.title ?? "").split(" | ")[0].trim()) : g ? agySnapshot(g) : null;
+  // Codex and Antigravity: a cost from your prices (prices.js), when one matches the model.
+  if (s?.kind === "codex") s.cost = costOf(s.totals, priceFor(v.prices, s.model ?? s.modelText));
   const name = c?.st.context ? shortModel(c.st.model) : c ? "Claude" : x ? codexModel(x.st.model) : g ? g.st.model ?? "Antigravity" : a.program?.name ?? "Agent";
   // Restart: only a Claude Code agent here whose conversation the watcher knows (revive.js).
   // Codex and Antigravity: one whose conversation was found, and sure of (codex.js, antigravity.js).
@@ -224,7 +244,7 @@ export function statsChip(v, a, t, status = null) {
 function menuItems(p) {
   const s = p.stats;
   return [
-    s ? { id: "details", label: "Usage details", hint: "›", go: () => openOverlay({ mod: MOD, kind: "popup", at: "pointer", width: 320, height: s.kind === "codex" ? 300 : 460, props: { stats: s } }) } : null,
+    s ? { id: "details", label: "Usage details", hint: "›", go: () => openOverlay({ mod: MOD, kind: "popup", at: "pointer", width: 320, height: s.kind === "codex" ? 340 : 460, props: { stats: s } }) } : null,
     p.pane ? { id: "focus", label: "Go to terminal", go: () => run("pane.focus", { pane: p.pane }) } : null,
     p.terminal ? { id: "pin", label: p.pinned ? "Unpin" : "Pin to the top", go: () => run("terminal.pin", { terminal: p.terminal, pinned: !p.pinned }) } : null,
     p.restart ? { id: "restart", label: "Restart", hint: "exit and resume", go: () => setShared(KEY_RESTART, { terminal: p.terminal, at: Date.now() }) } : null,
@@ -354,10 +374,12 @@ export function statsView(p, t) {
       .when(Boolean(tot), (el) => el
         .child(line("Output", `${tokens(tot.output)} tokens${tot.reasoning ? ` · ${tokens(tot.reasoning)} reasoning` : ""}`))
         .child(line("Input", `${tokens(tot.input)} new · ${tokens(tot.cacheRead)} from cache`)))
+      .when(s.cost != null, (el) => el.child(line("Cost", `about $${s.cost.toFixed(2)} at your prices`)))
       .when(Boolean(s.started), (el) => el.child(line("Running for", since(s.started))))
-      .child(div().pt(8).text_size(10.5).text_color(t.dim).child(agy
+      .child(div().pt(8).text_size(10.5).text_color(t.dim).child((agy
         ? "From agy's files in ~/.gemini/antigravity-cli (an undocumented format: a number it can't read is left out)."
-        : "From Codex's files in ~/.codex."));
+        : "From Codex's files in ~/.codex.")
+        + (s.cost == null ? " For a cost, add the model's prices to data/herdr-ranch-agents/prices.json in Herdr's folder." : "")));
   }
   return v_flex().id("agent-stats").w_full().p(12).gap(1).bg(t.popover).text_size(12.5)
     .on_key_down((e) => { if (e.key === "escape") closeOverlay(p.overlay); })

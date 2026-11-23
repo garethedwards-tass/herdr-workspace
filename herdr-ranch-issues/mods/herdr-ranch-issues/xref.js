@@ -152,6 +152,17 @@ export function openWeb(url) {
 export const repoOfUrl = (url) => /github\.com\/([^/]+\/[^/]+)\/(?:pull|issues)\/\d+/.exec(url ?? "")?.[1] ?? null;
 export const sameRepo = (a, b) => Boolean(a && b && a.toLowerCase() === b.toLowerCase());
 
+// A GitHub issue or pull request page from a clicked terminal link, or null:
+// https://github.com/<owner>/<repo>/issues/<n> or /pull/<n>, with anything after the number
+// (/files, /commits, ?query, #discussion_r1). { owner, repo, github: "owner/repo", kind: "issue" | "pr", number }.
+export function parseGithubLink(url) {
+  const m = /^https?:\/\/(?:www\.)?github\.com\/([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)\/([A-Za-z0-9._-]+)\/(issues|pull)\/(\d+)(?:[/?#]|$)/i.exec((url ?? "").trim());
+  if (!m || m[2] === "." || m[2] === ".." || /\.git$/i.test(m[2])) return null;
+  const number = Number(m[4]);
+  if (!(number > 0)) return null;
+  return { owner: m[1], repo: m[2], github: `${m[1]}/${m[2]}`, kind: m[3].toLowerCase() === "pull" ? "pr" : "issue", number };
+}
+
 // ---- Commits that mention a key -----------------------------------------------------------
 
 const US = "\x1f", RS = "\x1e";

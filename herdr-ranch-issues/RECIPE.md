@@ -83,7 +83,8 @@ One template per mode (segmented), a monospace textarea, the placeholders as chi
 - `mods/herdr-ranch-issues/main.js` (the list and page), `jira.js` (link file, search, slim rows), `github.js` (`gh`, same row shape), `rows.js` (grouping, nesting, search), `adf.js` (Atlassian Document Format to Markdown).
 - Shared with herdr-ranch-prs, identical copies of the repository's `shared/`: `links.js` (the space link, settings, split, icons, initials and GitHub avatars, segmented control, text sizes), `page-kit.js` (the page's header, timeline, sidebar, tabs and footer), `jira-client.js` (sign-in and REST), `link-dialog.js`, `agent-dialog.js` (Start agent and Prompts), `prompts.js` (modes, default templates, placeholders, `.herdr/prompts.md`).
 - The dialogs are this mod too: it opens itself as an overlay with `props.dialog` (`"link"` or `"agent"`), like the cog's popup (`props.settings`), and renders only that.
-- `mod.json`: `place: none`, a window overlay (80%), `button: { label: "Issues", icon: "issue.svg", opens: "panel", order: 20 }` for mod-buttons.
+- `mod.json`: `place: none`, a window overlay (80%), `button: { label: "Issues", icon: "issue.svg", opens: "panel", order: 20 }` for mod-buttons, and a `link_handlers` URL rule for `github.com/<owner>/<repo>/issues/<n>` (see **Terminal links**).
+- `mods/herdr-ranch-issues/link.js`: `handleLink` for a clicked issue link.
 - herdr: `spaces`, `shared`, `setShared`, `theme`, `props`, `settings`, `exec`, `readTextFile`, `writeTextFile`, `appHome`, `knownAgents`, `run`, `notify`, `openOverlay`, `closeOverlay`, `nextCommand`; global `fetch`.
 - Programs: `gh`, `git`; `security`, `secret-tool` or `powershell` for the Jira sign-in; `open`, `xdg-open` or `rundll32` for the browser.
 
@@ -110,5 +111,9 @@ One template per mode (segmented), a monospace textarea, the placeholders as chi
 ## Linked
 
 Through `xref.js` (shared with History and Pull requests): History and Pull requests open an issue here by key (`ACME-12`, a Linear key, or `#12`); one not in the list is made from the key and the space's projects. The page's **Commits** section lists up to 8 of the newest 20 commits on any branch whose message names the key as a whole word (`git log --all -i -E --grep`), each opening in History, and **Search History**. Development's pull requests of this repository open in Pull requests.
+
+### Terminal links
+
+Ctrl/Cmd-click on `https://github.com/<owner>/<repo>/issues/<n>` in a terminal (`parseGithubLink` in `xref.js`) opens that issue's page here, of any repository gh can read, as a request from another mod would (`openIn` with `{ key: "#n", github }`; a `#n` of another repository is never the list's own `#n`). Only when the clicked terminal is in the shown space and `gh api repos/<repo>/issues/<n>` answers on the space's machine with an issue, not a pull request. Anything else (gh signed out or without access, a pull request behind an `/issues/` link, an unknown URL shape) returns `pass`, so Herdr opens it in the browser.
 
 On a Jira issue, Parent, Sub-tasks and Relations rows end in **Jira ↗**, opening that key on the issue's site.

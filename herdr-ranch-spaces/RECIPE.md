@@ -82,3 +82,4 @@ Herdr's spaces list with git and links, in the sidebar of the mod-buttons layout
 - A click on a space's branch shows its changed files; Branches → Enter switches it, and `↓n` pulls.
 - With an edited and a staged file, a switch asks first; Stash leaves the new branch clean and `git stash pop` on the old one brings back both, staged and unstaged; switching to a missing branch after Stash puts the changes back.
 - New worktree → Issue lists your issues; Enter on one makes `KEY-short-title` and a space opens under the repository's space.
+- **Herdr updates** (`upstream.js`, from `shared/`): `main.js` calls `checkUpstream("spaces", <version>, <sha-256 of Herdr's spaces/main.js it was copied from>)`; when Herdr's file changes, a toast says so once per new file. `scripts/upstream-diff.sh spaces` shows the difference and the new sha-256.

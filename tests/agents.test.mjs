@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyState, apply, totals, windowOf, tokens, parseFirstRead, pickSession, subagentOf, taskList, projectDir, utf8Length, configDirs } from "../herdr-ranch-agents/mods/herdr-ranch-agents/claude.js";
-import { modelName, agentAccount, byAccount } from "../herdr-ranch-agents/mods/herdr-ranch-agents/extras.js";
+import { modelName, agentAccount, byAccount, badgeText } from "../herdr-ranch-agents/mods/herdr-ranch-agents/extras.js";
 import { state as herdr } from "./stubs/herdr.mjs";
 
 const reply = (id, usage, content = [], extra = {}) => ({ type: "assistant", requestedModel: "claude-opus-5-5", effort: "medium", ...extra, message: { id, model: "claude-opus-5-5", usage, content } });
@@ -223,4 +223,25 @@ test("byAccount: agents by their space's account, else their repository's; a rem
   assert.deepEqual(shown("none"), ["t3", "vps/t4"]);
   assert.deepEqual(shown("gone"), ["t1", "t2", "t3", "vps/t4"]);
   delete herdr.shared["ranch-accounts"];
+});
+
+test("badgeText: the Dock badge counts agents that need you, none is no badge", () => {
+  assert.equal(badgeText([]), null);
+  assert.equal(badgeText([{ status: "working" }, { status: "done" }]), null);
+  assert.equal(badgeText([{ status: "blocked" }, { status: "idle" }, { status: "blocked" }]), "2");
+});
+
+test("prices: the longest key a model starts with sets its price; the cost counts cache at its own rate", async () => {
+  const { priceFor, costOf } = await import("../herdr-ranch-agents/mods/herdr-ranch-agents/prices.js");
+  const prices = { "gpt-6": { input: 1, output: 8 }, "gpt-6.2-sol": { input: 2, cacheRead: 0.5, output: 10 }, "Gemini 4": { input: 3, output: 9 }, bad: { input: "x" } };
+  assert.equal(priceFor(prices, "gpt-6.2-sol").input, 2);
+  assert.equal(priceFor(prices, "gpt-6.1-luna").input, 1);
+  assert.equal(priceFor(prices, "Gemini 4 Neon").output, 9);
+  assert.equal(priceFor(prices, "claude-opus"), null);
+  assert.equal(priceFor(prices, "bad-model"), null);
+  assert.equal(priceFor({}, "gpt-6"), null);
+  assert.equal(costOf({ input: 1e6, cacheRead: 2e6, output: 1e6 }, prices["gpt-6.2-sol"]), 2 + 1 + 10);
+  assert.equal(costOf({ input: 1e6, cacheRead: 1e6, output: 0 }, prices["gpt-6"]), 2);
+  assert.equal(costOf(null, prices["gpt-6"]), null);
+  assert.equal(costOf({ input: 1 }, null), null);
 });

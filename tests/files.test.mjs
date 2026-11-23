@@ -30,3 +30,20 @@ test("expand: tabs as four spaces", () => {
   assert.equal(expand("\tif (x)\t{"), "    if (x)    {");
   assert.equal(expand("plain"), "plain");
 });
+
+test("Files link: the line a clicked path names, and which links it takes", async () => {
+  const { lineOf, wanted } = await import("../herdr-ranch-files/mods/herdr-ranch-files/link.js");
+  assert.equal(lineOf("src/app.js:42"), 42);
+  assert.equal(lineOf("src/app.js:42:7"), 42);
+  assert.equal(lineOf("src/app.js:42:7:"), 42);
+  assert.equal(lineOf("app.py(42)"), 42);
+  assert.equal(lineOf("app.cs(42,7)"), 42);
+  assert.equal(lineOf("https://x/blob/main/a.js#L42-L50"), 42);
+  assert.equal(lineOf("src/app.js"), null);
+  assert.equal(lineOf("src/app.js:0"), null);
+  const file = (path) => ({ kind: "file", raw: path, path });
+  assert.equal(wanted(file("/x/a.js"), { machine: null }), true);
+  assert.equal(wanted(file("/x/shot.png"), { machine: null }), false);
+  assert.equal(wanted(file("/x/a.js"), { machine: "vps" }), false);
+  assert.equal(wanted({ kind: "url", raw: "https://x", url: "https://x" }, {}), false);
+});

@@ -7,6 +7,7 @@ import { newer } from "../shared/update.js";
 import { fill, clean, DEFAULTS } from "../shared/prompts.js";
 import { storeSignIn, removeSignIn, credentials, forget, trustSite, call } from "../shared/jira-client.js";
 import { loadAvatars, avatarPics, spaceRepo } from "../shared/links.js";
+import { checkUpstream } from "../shared/upstream.js";
 
 const ok = (stdout = "") => ({ code: 0, stdout, stderr: "" });
 const fail = { code: 1, stdout: "", stderr: "" };
@@ -189,4 +190,20 @@ test("dialogs: no field shares a method's name (a field hides the method, and ca
     const fields = new Set([...src.matchAll(/this\.([a-zA-Z_]\w*) = /g)].map((m) => m[1]));
     assert.deepEqual([...methods].filter((m) => fields.has(m)), [], f);
   }
+});
+
+test("checkUpstream: a toast only when Herdr's copy of the mod changed", async () => {
+  const seen = [];
+  state.exec = (cmd, args) => { seen.push(args.at(-1)); return ok(`${state.sha}  ${args.at(-1)}\n`); };
+  state.notes = [];
+  state.sha = "aaa";
+  await checkUpstream("spaces", "0.1.17", "aaa");
+  assert.equal(state.notes.length, 0);
+  assert.equal(seen[0], "/tmp/herdr-test/mods/spaces/main.js");
+  state.sha = "bbb";
+  await checkUpstream("spaces", "0.1.17", "aaa");
+  assert.equal(state.notes.length, 1);
+  assert.match(state.notes[0].title, /spaces/);
+  assert.match(state.notes[0].body, /0\.1\.17/);
+  state.exec = null;
 });

@@ -6,8 +6,10 @@
 // Herdr's own editor, for selecting text. Other files open in Herdr's editor as before.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
-import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, notify } from "herdr";
+import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, notify, shared } from "herdr";
 import { supports, highlight, expand, codeView } from "./code-view.js"; // ranch
+import { checkUpstream } from "./upstream.js"; // ranch: say when Herdr changes the mod this copies
+import { OPEN_KEY } from "./link.js"; // ranch: files a terminal link asked for
 
 // ranch: lines past this stay in Herdr's editor: the colored view builds every piece of a line it shows.
 const COLOR_LINES = 50000;
@@ -50,6 +52,7 @@ async function directory(path, on) {
 
 export default class Files extends View {
   init(_props, cx) {
+    checkUpstream("files", "0.1.17", "eb59d8d2ae8a202958cc22a4c951f38469d0aebe698ea31c275a6a3b92ba1608"); // ranch: the copy's source
     this.saved = new Map(); this.mode = loadMode(); // ranch: the view mode
     // Selected lines of the colored view: [first, last] (0-based), the line a plain click picked,
     // and whether Shift was held at the last press (a list's click doesn't carry modifiers).
@@ -58,6 +61,31 @@ export default class Files extends View {
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set(); this.marks = {};
     this.refresh(cx);
     cx.timer.every(10000, cx => this.refresh(cx));
+    // ranch: a file a terminal link opened (link.js), with its line when it named one.
+    this.opened = shared(OPEN_KEY)?.at ?? 0;
+    cx.timer.every(250, cx => this.openAsked(cx));
+  }
+
+  // ranch: open what link.js asked for: in the focused pane's folder, by its path there when it's inside.
+  openAsked(cx) {
+    const ask = shared(OPEN_KEY);
+    if (!ask?.path || !(ask.at > this.opened)) return;
+    this.opened = ask.at;
+    if (key() !== this.context?.key) this.refresh(cx);
+    const root = this.root ?? "";
+    const path = root && ask.path.startsWith(root + "/") ? ask.path.slice(root.length + 1) : ask.path;
+    this.goto = ask.line ? { path, line: ask.line } : null;
+    this.show(path, cx);
+    cx.notify();
+  }
+
+  // ranch: select a line in Herdr's editor (it scrolls there); the colored view can't scroll from code.
+  selectLine(line) {
+    if (!this.code || this.text == null) return;
+    let start = 0;
+    for (let i = 1; i < line; i++) { const next = this.text.indexOf("\n", start); if (next < 0) break; start = next + 1; }
+    const end = this.text.indexOf("\n", start);
+    try { this.code.set_selected_range({ start, end: end < 0 ? this.text.length : end }); } catch { /* the file opens at the top */ }
   }
 
   watch(root, cx) {
@@ -147,12 +175,16 @@ export default class Files extends View {
     const context = this.context, root = this.root, on = this.on;
     cx.spawn(async cx => {
       try {
-        const text = await readTextFile(`${root}/${path}`, { on });
+        const text = await readTextFile(path.startsWith("/") ? path : `${root}/${path}`, { on }); // ranch: a link may name a file outside the folder
         if (this.file !== path || !this.current(context)) return;
         if (text === null) { this.fileError = "This file is no longer available"; return; }
         if (text.includes("\0")) { this.fileError = "Binary file · no text preview"; return; }
         this.text = text.length > 400000 ? text.slice(0, 400000) + "\n… (file truncated)" : text;
         const lines = this.text.split("\n");
+        // ranch: a link with a line opens in Herdr's editor at that line (Colors goes back).
+        const goto = this.goto?.path === path ? this.goto.line : null;
+        this.goto = null;
+        if (goto) { this.mode = "editor"; this.gotoLine = goto; } else this.mode = loadMode();
         // ranch: a language the helper knows: the colored view, plain at once and colored when it answers.
         if (lines.length <= COLOR_LINES && await supports(path)) {
           if (this.file !== path) return;
@@ -176,6 +208,7 @@ export default class Files extends View {
     this.code = EditorState.new({ language: LANG[ext] ?? ext, readonly: true, value: this.text,
       font_family: settings().font_family, font_size: settings().font_size,
       syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
+    if (this.gotoLine) { this.selectLine(this.gotoLine); this.gotoLine = null; } // ranch: a link's line
   }
 
   // Line selection in the colored view.
