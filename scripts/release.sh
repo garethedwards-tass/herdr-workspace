@@ -39,7 +39,11 @@ if [ "$publish" = yes ]; then
   [ -n "$(printf '%s' "$notes" | tr -d '[:space:]')" ] || { echo "CHANGELOG.md has no notes under ## $tag." >&2; exit 1; }
   git tag -a "$tag" -m "Herdr Ranch $tag"
   git push -q origin "$tag"
-  printf '%s\n' "$notes" | gh release create "$tag" --title "Herdr Ranch $tag" --notes-file -
+  # On origin's repository (gh would otherwise pick the fork's parent), as its owner when gh
+  # has that account (gh auth token --user; never gh auth switch).
+  slug=$(git remote get-url origin | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##')
+  token=$(gh auth token --user "${slug%%/*}" 2>/dev/null || true)
+  printf '%s\n' "$notes" | GH_TOKEN="${token:-${GH_TOKEN:-}}" gh release create "$tag" --repo "$slug" --title "Herdr Ranch $tag" --notes-file -
   echo "Published $tag. Every cog offers Update within a day (or at once with Check)."
   exit 0
 fi
