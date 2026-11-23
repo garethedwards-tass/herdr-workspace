@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { state } from "./stubs/herdr.mjs";
-import { place, probe, parseWorktrees, arrange, tail, linkLabel, countStatus, workIn, checkoutAt, hasWork, workText, issueBranch, parseRefs, addArgs, worktreePath, parseStatus, switchArgs, diverged, switchRisk, stashMessage } from "../herdr-ranch-spaces/mods/herdr-ranch-spaces/git.js";
+import { place, probe, repoName, parseWorktrees, arrange, tail, linkLabel, countStatus, workIn, checkoutAt, hasWork, workText, issueBranch, parseRefs, addArgs, worktreePath, parseStatus, switchArgs, diverged, switchRisk, stashMessage } from "../herdr-ranch-spaces/mods/herdr-ranch-spaces/git.js";
 import { source, looksLikeKey } from "../herdr-ranch-spaces/mods/herdr-ranch-spaces/issues.js";
 import { resolveFolder, tilde, splitTyped, suggestions } from "../herdr-ranch-spaces/mods/herdr-ranch-spaces/new-space.js";
 import { accountOf, setAccount, addAccount, updateAccount, removeAccount, checkAccount, envScript, argvAs, runAs, parseGhAccounts, defaultLabel, defaultLetter, setDefaultLabel, defaultGhUser, setDefaultGhUser, launchAs, defaultBadge, accountColor, accountLetter, ghAs, ghUserOf } from "../shared/accounts.js";
@@ -373,4 +373,10 @@ test("accounts: a Codex folder is a sign-in of its own; envScript exports CODEX_
   state.shared["ranch-accounts"] = undefined;
   const a = addAccount({ label: "P", codexHome: "~/.codex-p", claudeDir: "" });
   assert.deepEqual(a, { id: a.id, label: "P", codexHome: "~/.codex-p" });
+});
+
+test("repoName: a repo is named after its project folder, a bare one and a hidden .bare included (Herdr 0.1.17)", () => {
+  assert.equal(repoName("/x/clif/.git"), "clif");
+  assert.equal(repoName("/x/clif.git"), "clif");
+  assert.equal(repoName("/x/clif/.bare"), "clif");
 });

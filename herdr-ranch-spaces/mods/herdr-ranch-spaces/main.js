@@ -1,4 +1,4 @@
-// Herdr Ranch: a copy of Herdr's own `spaces` mod (Herdr 0.1.15), changed only at the lines
+// Herdr Ranch: a copy of Herdr's own `spaces` mod (Herdr 0.1.17), changed only at the lines
 // marked `ranch:`; what it adds is in extras.js, git.js and the dialogs (see RECIPE.md).
 //
 // Workspace spaces: stable colored avatars, worktrees under their checkout,
@@ -7,13 +7,17 @@
 // switch, right-click for its menu, drag to reorder.
 
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, props } from "herdr";
 // ranch: what Herdr Ranch adds, and its git reads.
 import { dialogFor, start, spaceMenu, spaceTail, moreRow, looseRow, terminalRows, foldChevron, isOpen, worktreeSpaceRow, newSpaceMenu, programIcon, foldAllButton, byAccount, accountFilterRow } from "./extras.js";
 import { writeIcons } from "./actions.js";
 import { agentPlaces, PLACES } from "./agents-at.js";
 import { probe, worktreesWithWork, arrange } from "./git.js";
+// Places looked at together (two git runs each). All at once, a few hundred spaces
+// run out of the app's open files (256 when started from the Dock on macOS) or
+// past a machine core's 16 running execs, and those spaces wait for FALLBACK.
+const AT_ONCE = 6;
 const GROUP_GAP = 8; // ranch: room after an open space's rows
 const LOOSE_EVERY = 60000; // ranch: how often a worktree without a space has its work read again
 
@@ -83,7 +87,7 @@ export default class Spaces extends View {
     this.busy = {}; // pane -> an agent working or a program in front of its shell
     this.ready = {}; // machine -> its layout was readable at the last look
     this.at = {}; // space -> its where() at the last look
-    this.watching = new Set(); // local repos' git folders
+    this.watching = new Map(); // local repos' pending folder watches
     // Spaces made while this runs wait (at most a moment) for their git, so a
     // worktree appears under its repo instead of jumping there.
     this.shown = new Set(spaces().map((s) => s.id));
@@ -91,9 +95,14 @@ export default class Spaces extends View {
     this.pressed = null;
     this.over = null;
     this.machines = [];
-    this.reconnecting = JSON.parse(localStorage.getItem("machines.reconnecting") ?? "{}");
-    for (const state of Object.values(this.reconnecting)) state.busy = false;
-    this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
+    this.scroll = ScrollHandle.new(); // the list's position: the active space is brought into view through it
+    this.activeAt = -1; // the active space's place among the list's children (headers and rows), -1 when not drawn
+    try {
+      this.reconnecting = JSON.parse(localStorage.getItem("machines.reconnecting") ?? "{}");
+      if (!this.reconnecting || typeof this.reconnecting !== "object" || Array.isArray(this.reconnecting)) this.reconnecting = {};
+      for (const state of Object.values(this.reconnecting)) state.busy = false;
+    } catch { this.reconnecting = {}; }
+    try { this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]")); } catch { this.folded = new Set(); }
     this.refreshMachines(cx);
     cx.timer.every(15000, cx => this.refreshMachines(cx));
     // Refresh only when the refs could have changed (see `due`).
@@ -117,6 +126,16 @@ export default class Spaces extends View {
     const at = {};
     for (const s of sp) at[s.id] = where(s, ps);
     const keys = new Set(Object.values(at).filter((k) => JSON.parse(k)[1]));
+    for (const k of Object.keys(this.git)) if (!keys.has(k)) {
+      delete this.git[k];
+      delete this.checked[k];
+      this.unsure.delete(k);
+    }
+    const repos = new Set(Object.values(this.git).filter(Boolean).map((g) => g.repo));
+    for (const [repo, pending] of this.watching) if (!repos.has(JSON.stringify([null, repo]))) {
+      this.watching.delete(repo);
+      pending.cancel();
+    }
     const due = new Set([...keys].filter((k) => !(k in this.git)));
     for (const [id, k] of Object.entries(at)) if (this.at[id] && this.at[id] !== k && keys.has(k)) due.add(k);
     this.at = at;
@@ -212,12 +231,13 @@ export default class Spaces extends View {
       while (this.pending.size) {
         const keys = [...this.pending];
         this.pending.clear();
-        await Promise.all(keys.map((key) => this.check(key, cx)));
+        let next = 0;
+        await Promise.all(Array.from({ length: Math.min(AT_ONCE, keys.length) }, async () => {
+          while (next < keys.length) await this.check(keys[next++], cx);
+        }));
         // ranch: and the worktrees (with their work) of the repositories those places are in.
         await this.refreshTrees(keys);
       }
-      const used = new Set(Object.values(this.git).filter(Boolean).map((g) => JSON.parse(g.repo)).filter(([on]) => !on).map(([, repo]) => repo));
-      for (const repo of this.watching) if (!used.has(repo)) this.watching.delete(repo);
       this.refreshing = false;
       cx.notify();
     });
@@ -257,15 +277,23 @@ export default class Spaces extends View {
 
   watch(repo, cx) {
     if (this.watching.has(repo)) return;
-    this.watching.add(repo);
+    const pending = watchFolder(repo);
+    this.watching.set(repo, pending);
     cx.spawn(async (cx) => {
+      let current = pending;
       try {
-        while (this.watching.has(repo)) {
-          await watchFolder(repo);
+        for (;;) {
+          await current;
+          if (this.watching.get(repo) !== current) return;
           const mine = JSON.stringify([null, repo]);
-          if (this.watching.has(repo)) this.refreshGit(Object.keys(this.git).filter((k) => this.git[k]?.repo === mine), cx);
+          const keys = Object.keys(this.git).filter((k) => this.git[k]?.repo === mine);
+          if (!keys.length) break;
+          this.refreshGit(keys, cx);
+          current = watchFolder(repo);
+          this.watching.set(repo, current);
         }
-      } catch { this.watching.delete(repo); }
+      } catch {}
+      if (this.watching.get(repo) === current) this.watching.delete(repo);
     });
   }
 
@@ -320,18 +348,30 @@ export default class Spaces extends View {
     const draw = (r) => (r.kind === "more" ? moreRow(this, r, t) : r.kind === "loose" ? looseRow(this, r, t) : collapsed ? this.compact(r, t) : r.tree ? worktreeSpaceRow(this, r, t) : this.row(r, t));
     // ranch: a space's terminals and worktrees fold under it (worktree spaces fold their own terminals).
     // An open space's rows end with a gap (GROUP_GAP) before the next space.
+    // Where the active space's row lands among the children this returns: the list scrolls by its direct
+    // children, and machine headers, login notes and loading rows count too (`before`).
+    this.activeAt = -1;
+    let before = 0;
     const drawAll = (list) => {
       let gapDue = null;
       const gap = () => { const id = gapDue; gapDue = null; return id ? [div().id(`group-gap-${id}`).h(GROUP_GAP).flex_none()] : []; };
-      const out = list.flatMap((r) => {
-        if (r.parent && !isOpen(this, r.parent)) return [];
-        if (r.kind !== "space" || collapsed) return [draw(r)];
-        const before = r.parent ? [] : gap();
+      const out = [];
+      for (const r of list) {
+        if (r.parent && !isOpen(this, r.parent)) continue;
+        if (r.kind !== "space" || collapsed) {
+          if (r.kind === "space" && r.w.active && this.activeAt < 0) this.activeAt = before + out.length;
+          out.push(draw(r));
+          continue;
+        }
+        if (!r.parent) out.push(...gap());
         const terms = terminalRows(this, r.w, t, r.tree ? 2 : 1);
         if (!r.parent && isOpen(this, r.w.id)) gapDue = r.w.id;
-        return [...before, draw(r), ...terms];
-      });
-      return [...out, ...gap()];
+        if (r.w.active && this.activeAt < 0) this.activeAt = before + out.length;
+        out.push(draw(r), ...terms);
+      }
+      out.push(...gap());
+      before += out.length;
+      return out;
     };
     const machineOf = (r) => (r.w ? r.w.machine ?? null : r.on ?? JSON.parse(r.repo)[0]);
     const remote = [...new Set([...rows.map(r => r.w?.machine).filter(Boolean), ...this.machines.map(m => m.name), ...Object.keys(this.reconnecting)])].sort();
@@ -373,6 +413,9 @@ export default class Spaces extends View {
               .tooltip(repair?.error || "This machine was rebuilt or replaced. Click to connect to the new one.")
               .on_click((_e, cx) => { cx.stop_propagation(); this.reconnect(machine, cx); })
               .child(repair?.busy ? "Connecting…" : "Connect"))))
+          .when(machine?.keeps_running_after_logout === false, el => el.child(div().id(`machine-logout-${m}`)
+            .flex_none().text_color(t.blocked).tooltip("Agents stop when you disconnect. Click for the fix.")
+            .on_click((_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "machine-add", kind: "dialog", width: 560 }); }).child("⚠")))
           .when(connected, el => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(4).hover(s => s.bg(t.hover).text_color(t.foreground))
             .on_click((_e, cx) => { cx.stop_propagation(); newSpaceMenu(m) /* ranch */; }).child("+")))
           .child(div().size(6).rounded(3).flex_none().bg(connected ? t.ansi2 : t.dim))
@@ -384,7 +427,7 @@ export default class Spaces extends View {
           .child(h_flex().size(18).rounded(5).border_1().border_color(t.dim).items_center().justify_center()
             .child(svg("mods/workspace-chrome/plus.svg").size(10))))
         .when(!collapsed, el => el.child(svg("mods/workspace-chrome/plus.svg").size(12)).child("New space there"));
-      if (!collapsed && rebuilt) return [head];
+      if (!collapsed && rebuilt) { before += 1; return [head]; }
       const cell = collapsed ? railCell : (el) => el;
       const guidance = !collapsed && login ? [v_flex().px(8).pb(6).gap(3).flex_none()
         .child(div().text_size(12).text_color(t.blocked).child("needs a login: run"))
@@ -394,7 +437,10 @@ export default class Spaces extends View {
             .text_size(12).text_color(t.foreground).bg(t.raised).cursor_pointer().hover(s => s.bg(t.hover))
             .on_click((_e, cx) => { cx.stop_propagation(); cx.write_to_clipboard(login); this.copiedLogin = login; cx.notify(); })
             .child(this.copiedLogin === login ? "Copied" : "Copy")))] : [];
-      return [cell(head), ...guidance, ...(folded ? [] : mine.length ? drawAll(mine) : [loading(m) ? loadingRow(m) : cell(empty)])];
+      before += 1 + guidance.length;
+      const body = folded ? [] : mine.length ? drawAll(mine) : [loading(m) ? loadingRow(m) : cell(empty)];
+      if (folded || !mine.length) before += body.length;
+      return [cell(head), ...guidance, ...body];
     });
   }
 
@@ -512,6 +558,14 @@ export default class Spaces extends View {
       changed = true;
     }
     if (changed) setShared("space.colors", kept);
+    const list = folded ? [] : this.grouped(t, collapsed);
+    // Bring the active space into view when it, or its place in the list, changes; a row already in view stays put.
+    const active = sp.find(p => p.active)?.id;
+    if (active !== this.revealed || this.activeAt !== this.revealedAt) {
+      this.revealed = active;
+      this.revealedAt = this.activeAt;
+      if (this.activeAt >= 0) this.scroll.scroll_to_item(this.activeAt);
+    }
     return v_flex().id("ranch-spaces").track_focus(this.handle).size_full().min_h(0).bg(t.chrome).text_size(13) // ranch: focus target
       .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(12).text_color(t.dim)
         .when(collapsed, el => el.pl(0).pr(0).justify_center())
@@ -523,8 +577,10 @@ export default class Spaces extends View {
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => newSpaceMenu(null)).child(svg("mods/workspace-chrome/plus.svg").size(14)))) // ranch: Terminal or an agent
       .when(!collapsed && !folded, el => el.child(accountFilterRow(this, t))) // ranch: spaces by account
-      .when(!folded, el => el.child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).pb(14).overflow_y_scrollbar().mode("always")
+      .when(!folded, el => el.child(v_flex().flex_1().min_h(0).px(collapsed ? 0 : 8).pb(14).overflow_y_scrollbar().mode("always").track_scroll(this.scroll)
+        // A block above (another mod's) growing, or the window resizing, shrinks this list and can push the active space out.
+        .on_size_change((_size, cx) => { if (this.activeAt >= 0) { this.scroll.scroll_to_item(this.activeAt); cx.notify(); } })
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
-        .children(this.grouped(t, collapsed))));
+        .children(list)));
   }
 }

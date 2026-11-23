@@ -2,7 +2,7 @@
 
 Herdr's Files panel with syntax colors: a file `ranch-highlight` knows (CFML with cfscript and `<cfquery>` SQL, JavaScript, TypeScript, SQL, Python, Go and the rest of its languages) opens colored by tree-sitter, the way the diff views color code. Behind the tab bar's **Files** button in the mod-buttons layout, in place of Herdr's own.
 
-`main.js` is a copy of Herdr's `files` mod (Herdr 0.1.15) with a few marked changes, so its browsing stays as Herdr has it: the focused pane's folder, folders opened lazily, git status colors, read-only previews.
+`main.js` is a copy of Herdr's `files` mod (Herdr 0.1.17) with a few marked changes, so its browsing stays as Herdr has it: the focused pane's folder, folders opened lazily, git status colors, read-only previews.
 
 ## What you see
 
@@ -19,9 +19,9 @@ Herdr's Files panel with syntax colors: a file `ranch-highlight` knows (CFML wit
 
 ## Built from
 
-- `mods/herdr-ranch-files/main.js`: a copy of Herdr's `mods/files/main.js` (0.1.15). Its changes, each marked `ranch:`: the import of `code-view.js`; `COLOR_LINES` and the remembered view mode; loading a file keeps its text and, for a language the helper knows, its lines and then its spans; `editor()` makes Herdr's editor only when shown; `setMode()`; the **Editor | Colors** button; the body shows the colored view or the editor. After a Herdr update: copy its `files/main.js` again and re-apply these.
+- `mods/herdr-ranch-files/main.js`: a copy of Herdr's `mods/files/main.js` (0.1.17). Its changes, each marked `ranch:`: the import of `code-view.js`; `COLOR_LINES` and the remembered view mode; loading a file keeps its text and, for a language the helper knows, its lines and then its spans; `editor()` makes Herdr's editor only when shown; `setMode()`; the **Editor | Colors** button; the body shows the colored view or the editor. After a Herdr update: copy its `files/main.js` again and re-apply these.
 - `code-view.js`: `supports`, `expand`, `highlight` (tested in `tests/files.test.mjs`), and `codeView`.
-- `mod.json`: `place: none`, `cloned_from` Herdr's `files` 0.1.15; the mod-buttons layout's `files` block shows it.
+- `mod.json`: `place: none`, `cloned_from` Herdr's `files` 0.1.17; the mod-buttons layout's `files` block shows it.
 - herdr: the copy's own, plus `appHome`, `home`, `writeTextFile`, `settings`. Programs: `ranch-highlight` when installed, `mkdir`, `rm`.
 
 ## Watch out

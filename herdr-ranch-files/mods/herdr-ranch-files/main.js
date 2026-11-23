@@ -1,5 +1,5 @@
 // A lazy file browser for the focused pane's folder, with bounded read-only previews.
-// Herdr Ranch: a copy of Herdr's own `files` mod (Herdr 0.1.15), changed only at the lines
+// Herdr Ranch: a copy of Herdr's own `files` mod (Herdr 0.1.17), changed only at the lines
 // marked `ranch:` (see RECIPE.md).
 // Herdr Ranch's clone of Herdr's Files panel: a file the ranch-highlight helper knows (CFML,
 // JS, SQL...) shows colored by tree-sitter (code-view.js); Editor in the header switches to
@@ -174,7 +174,7 @@ export default class Files extends View {
     if (this.code || this.text == null) return;
     const t = theme(), ext = path.includes(".") ? path.split(".").pop() : "txt";
     this.code = EditorState.new({ language: LANG[ext] ?? ext, readonly: true, value: this.text,
-      font_family: settings().font_family, font_size: 12,
+      font_family: settings().font_family, font_size: settings().font_size,
       syntax: { keyword: t.ansi5, string: t.ansi2, comment: t.dim, function: t.ansi4, type: t.ansi3, number: t.ansi1, constant: t.ansi6 } });
   }
 
@@ -252,7 +252,7 @@ export default class Files extends View {
           .track_focus(this.handle).on_key_down((e, cx) => this.codeKey(e, cx))
           // Shift for the click that follows, and the keys (⌘C, ⌘A, Esc) once pressed.
           .on_mouse_down("left", (e) => { this.shift = Boolean(e.modifiers?.shift); try { this.handle.focus(); } catch { /* ⌘C waits for the next click */ } })
-          .child(codeView("file-code", this.lines, this.spans, t, settings().font_family, 12, this.selection()).size_full())
-        : this.code ? Editor.new(this.code).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…")));
+          .child(codeView("file-code", this.lines, this.spans, t, settings().font_family, settings().font_size, this.selection()).size_full())
+        : this.code ? Editor.new(this.code).font_family(settings().font_family).text_size(settings().font_size).flex_1().min_h(0) : div().p(12).text_color(t.dim).child(this.fileError || "Loading file…")));
   }
 }

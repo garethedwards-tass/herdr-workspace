@@ -24,24 +24,39 @@ export const mainOf = (common) => common.replace(/\/\.git\/?$/, "");
 // One place's git: { name, branch, ahead, behind, repo, main, top, linked }, null outside git.
 // `repo` is a key ([machine, common dir]) shared by every checkout of one repository.
 // Throws when git couldn't be asked (a machine away), so the caller asks again later.
+// Both runs, finished: a place isn't done while one of its runs still holds a slot.
+async function both(a, b) {
+  const done = await Promise.allSettled([a, b]);
+  const failed = done.find((d) => d.status === "rejected");
+  if (failed) throw failed.reason;
+  return done.map((d) => d.value);
+}
+// A repo's name from its git folder: the folder holding .git, a bare repo's own
+// name, or the folder holding a hidden bare repo (<project>/.bare).
+export const repoName = (common) => {
+  if (common.endsWith("/.git")) return base(common.slice(0, -5));
+  const own = base(common);
+  return own === ".bare" ? base(common.slice(0, -own.length - 1)) : own.replace(/\.git$/, "");
+};
+
 export async function probe(cwd, on) {
   // Ref-only reads: no scan of the worktree, nothing written under .git.
-  const [top, common] = await Promise.all([
+  const [top, common] = await both(
     exec("git", ["rev-parse", "--path-format=absolute", "--show-toplevel"], { cwd, on }),
     exec("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd, on }),
-  ]);
+  );
   if (top.code !== 0 || common.code !== 0) {
     if (/not a git repository/i.test(top.code !== 0 ? top.stderr : common.stderr)) return null;
     throw new Error((top.stderr || common.stderr || "git failed").trim());
   }
   const t = top.stdout.replace(/\n$/, ""), c = common.stdout.replace(/\n$/, "");
-  const [branch, counts] = await Promise.all([
+  const [branch, counts] = await both(
     exec("git", ["symbolic-ref", "-q", "HEAD"], { cwd, on }),
     exec("git", ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], { cwd, on }),
-  ]);
+  );
   const [ahead, behind] = counts.code === 0 ? counts.stdout.trim().split(/\s+/).map(Number) : [0, 0];
   return {
-    name: c.endsWith("/.git") ? base(c.slice(0, -5)) : base(c).replace(/\.git$/, ""),
+    name: repoName(c),
     branch: branch.code === 0 ? branch.stdout.trim().replace(/^refs\/heads\//, "") : null,
     ahead: ahead || 0, behind: behind || 0,
     repo: JSON.stringify([on ?? null, c]), main: mainOf(c), top: t, linked: c !== `${t}/.git`,
