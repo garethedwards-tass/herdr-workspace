@@ -2,8 +2,21 @@
 
 Versions of the Herdr Ranch suite: the Issues, Pull requests and Reviews mods and the mod-buttons layout share one version. The cog in Issues and Pull requests shows the installed version and offers **Update** when a newer release exists.
 
-## Unreleased
+## v0.6.0
 
+- **Terminal links:** Ctrl/Cmd-click a file path in a terminal to open it in the Files panel; with a line (`app.js:42`, `app.py(42)`, `#L42`) it opens in Herdr's editor with that line selected. A GitHub issue link opens in Issues, and a pull request of the space's repository in Pull requests. Anything they can't show (folders, images, other repositories' pull requests, links gh can't read) opens as before. Needs Herdr 0.1.17.
+- **Antigravity:** agents started with Antigravity's CLI (`agy`) get what Claude Code and Codex have: the conversation's title on the row, model and context in the pill, **Usage details**, and **Restart** (resumes the same conversation). Start agent offers its model and effort, and Usage shows its quota.
+- **Usage details for Codex and Antigravity:** model and effort, context, turns or model calls, output and input tokens (new and from cache), and running time. A cost shows when you put the model's prices in `data/herdr-ranch-agents/prices.json` in Herdr's folder; none are built in.
+- **Accounts hold a sign-in per provider:** an account is a Claude Code folder, a GitHub login and a Codex folder (`CODEX_HOME`); Antigravity uses its usual sign-in. The default account can be renamed, gets the letter of its name, and can have its own GitHub login. Every account can be edited, and a space can be switched back to the default. Usage shows Codex limits per account.
+- **Agents:** a filter by account, like Spaces'. The Dock icon counts the agents that need you. A pane you renamed names its agent. A marker shows agents working in a linked git worktree.
+- **Agents:** each agent has a pill with its status, model and context; a click (or right-click on the row) opens its menu: Usage details, Go to terminal, Pin, Restart, Copy session ID. **Restart** brings back a Claude Code or Codex session that stopped reporting, as the account it ran as, on the same conversation. Agents that stop reporting a status stay listed, marked, with a button to bring them back.
+- **Spaces, Agents:** each panel folds to its header.
+- **Spaces:** a New space dialog (⌘N, or +) with the folder, the name and what to start: a terminal or an agent. A space whose folder is gone no longer shows "cannot run git". Switch branch switches only on Enter or its button.
+- **Usage:** usage limits in the status bar: every Claude Code account, Codex and Antigravity, with a hover panel of details and the current session's context. From [VladTemp27/herdr-mods](https://github.com/VladTemp27/herdr-mods) usage-limits.
+- **Servers:** a Servers panel styled like Spaces, with lanes from container labels. From [obrunogonzaga/herdr-mods](https://github.com/obrunogonzaga/herdr-mods) servers-panel.
+- **Files:** select lines in the colored view and copy them (⌘C, ⌘A, Esc).
+- **Herdr 0.1.17:** Agents, Files and Spaces take in Herdr's own changes since 0.1.15: titles keep a leading emoji or bracket, a kept sub-agent shows its own done, the rail marks the agent you're on, the file preview uses your terminal font size, the active space scrolls into view, git checks run a few at a time, folder watches are released, and a `project/.bare` repository is named after the project. When a Herdr update changes one of those mods again, a toast says so (`scripts/upstream-diff.sh` shows what changed).
+- **Releases:** `scripts/release.sh` copies each shared file only into the mods that keep one.
 - **Spaces:** a checkout a lane serves (a worktree, or a main checkout) shows the lane's badge, such as **L2**, read from the lane containers' `lane` labels like Servers' lanes; a click opens the lane's site. Servers and Spaces share `lanes.js`.
 - **Highlighting:** CFML comments (`<!--- --->`, and HTML and SQL comments inside `.cfm` files) are grey like other comments; the CFML queries' extra `@spell` capture stopped them being colored at all.
 - **Spaces:** a Collapse all / Expand all button in the header.

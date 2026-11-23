@@ -55,7 +55,8 @@ for mod in */mods/*/; do
   mod=${mod%/}
   [ -f "$mod/main.js" ] || continue
   case "$mod" in mod-buttons/*) continue ;; esac # the layout's bar keeps no shared/
-  cp shared/*.js "$mod/"
+  # Only the shared files this mod keeps a copy of (CI checks which mod has which).
+  for f in shared/*.js; do [ -f "$mod/$(basename "$f")" ] && cp "$f" "$mod/"; done
 done
 
 # 2. Each mod.json's own version (the first "version", not one nested in it).

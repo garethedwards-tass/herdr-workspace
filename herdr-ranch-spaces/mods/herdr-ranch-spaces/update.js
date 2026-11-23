@@ -6,7 +6,7 @@
 
 import { exec, appHome, shared, setShared, run, notify, window as appWindow } from "herdr";
 
-export const VERSION = "0.5.0";
+export const VERSION = "0.6.0";
 export const REPO = "garethedwards-tass/herdr-workspace";
 const KEY = "ranch-update", DAY = 24 * 3600 * 1000;
 const platform = () => { try { return appWindow().platform; } catch { return "macos"; } };
