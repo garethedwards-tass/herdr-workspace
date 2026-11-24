@@ -10,7 +10,7 @@ import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { props, closeOverlay, run, theme, spaces, knownAgents } from "herdr";
 import { openLinkDialog } from "./links.js";
-import { openWorktree, openNew, openRemove, openGit, ICONS } from "./actions.js";
+import { openWorktree, openNew, openRemove, openGit, openBoard, ICONS } from "./actions.js";
 import { accounts, argvAs, runAs, launchAs, accountColor, accountLetter, defaultLabel, defaultLetter, defaultGhUser, defaultBadge } from "./accounts.js";
 
 const MOD = "herdr-ranch-spaces";
@@ -45,6 +45,7 @@ export function menuItems(p, agents = []) {
       ["New worktree…", `${ICONS}/branch-plus.svg`, () => openWorktree({ space: id, action: "new" })],
       ["Open worktree…", CHROME("git-compare"), () => openWorktree({ space: id, action: "open" })],
       ...(p.git === "linked" ? [["Remove worktree…", CHROME("archive"), () => openWorktree({ space: id, action: "remove" })]] : []),
+      ["All worktrees…", `${ICONS}/folder-tree.svg`, () => openBoard()],
       SEP,
     ] : []),
     // A worktree uses its repository space's link and account (linkOf, accountOf): set them there.

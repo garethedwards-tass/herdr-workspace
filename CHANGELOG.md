@@ -2,6 +2,10 @@
 
 Versions of the Herdr Ranch suite: the Issues, Pull requests and Reviews mods and the mod-buttons layout share one version. The cog in Issues and Pull requests shows the installed version and offers **Update** when a newer release exists.
 
+## Unreleased
+
+- **Worktrees board** (Spaces: the folder-tree button in its header): every worktree of every repository, grouped by ticket across repositories, with Jira titles and pull requests. It finds the ones ready to clean up (merged, or no work of their own) and removes them with their branch and space in one go, tidies empty folders, flags a main checkout off main and branches pushing under another name, and makes one ticket's worktree in several repositories at once.
+
 ## v0.6.0
 
 - **Terminal links:** Ctrl/Cmd-click a file path in a terminal to open it in the Files panel; with a line (`app.js:42`, `app.py(42)`, `#L42`) it opens in Herdr's editor with that line selected. A GitHub issue link opens in Issues, and a pull request of the space's repository in Pull requests. Anything they can't show (folders, images, other repositories' pull requests, links gh can't read) opens as before. Needs Herdr 0.1.17.

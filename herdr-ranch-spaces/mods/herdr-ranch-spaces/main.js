@@ -10,7 +10,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, ScrollHandle } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, props } from "herdr";
 // ranch: what Herdr Ranch adds, and its git reads.
-import { dialogFor, start, spaceMenu, spaceTail, moreRow, looseRow, terminalRows, foldChevron, isOpen, worktreeSpaceRow, newSpaceMenu, programIcon, foldAllButton, byAccount, accountFilterRow } from "./extras.js";
+import { dialogFor, start, spaceMenu, spaceTail, moreRow, looseRow, terminalRows, foldChevron, isOpen, worktreeSpaceRow, newSpaceMenu, programIcon, foldAllButton, boardButton, byAccount, accountFilterRow } from "./extras.js";
 import { writeIcons } from "./actions.js";
 import { checkUpstream } from "./upstream.js"; // ranch: say when Herdr changes the mod this copies
 import { agentPlaces, PLACES } from "./agents-at.js";
@@ -575,7 +575,7 @@ export default class Spaces extends View {
           .tooltip(folded ? "Show the Spaces list" : "Fold the Spaces list to its header")
           .on_click(() => toggleFold("spaces", 31)) // ranch: fold the panel
           .child(svg(foldChevronIcon(folded)).size(10)).child("Spaces"))
-          .child(div().flex_1()).when(!folded, el => el.child(foldAllButton(this, t)))) // ranch: collapse / expand all
+          .child(div().flex_1()).when(!folded, el => el.child(boardButton(t)).child(foldAllButton(this, t)))) // ranch: the Worktrees board; collapse / expand all
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
           .on_click(() => newSpaceMenu(null)).child(svg("mods/workspace-chrome/plus.svg").size(14)))) // ranch: Terminal or an agent
       .when(!collapsed && !folded, el => el.child(accountFilterRow(this, t))) // ranch: spaces by account

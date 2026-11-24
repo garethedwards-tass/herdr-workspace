@@ -14,8 +14,9 @@ import { NewDialog } from "./new.js";
 import { NewSpaceDialog } from "./new-space.js";
 import { RemoveDialog } from "./remove.js";
 import { GitDialog } from "./git-dialog.js";
+import { BoardDialog } from "./board-dialog.js";
 import { accounts, accountOf, accountColor, accountLetter, accountParts, defaultLabel, defaultBadge } from "./accounts.js";
-import { openNew, openGit, ICONS } from "./actions.js";
+import { openNew, openGit, openBoard, ICONS } from "./actions.js";
 import { base, checkoutAt, hasWork } from "./git.js";
 
 export const MOD = "herdr-ranch-spaces";
@@ -42,7 +43,7 @@ const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } cat
 
 // The list opened as one of its own dialogs or popups: that view, else null.
 export function dialogFor(p, cx) {
-  const kind = p?.dialog === "link" ? LinkDialog : p?.dialog === "new" ? NewDialog : p?.dialog === "new-space" ? NewSpaceDialog : p?.dialog === "remove" ? RemoveDialog : p?.dialog === "git" ? GitDialog : p?.menu ? SpaceMenu : null;
+  const kind = p?.dialog === "link" ? LinkDialog : p?.dialog === "new" ? NewDialog : p?.dialog === "new-space" ? NewSpaceDialog : p?.dialog === "remove" ? RemoveDialog : p?.dialog === "git" ? GitDialog : p?.dialog === "board" ? BoardDialog : p?.menu ? SpaceMenu : null;
   return kind ? cx.new(kind, p) : null;
 }
 
@@ -69,6 +70,7 @@ export function start(v, cx) {
         else if (id && c === "branches") openGit(id, "branches");
         else if (id && c === "new-worktree") openNew(id, "branch");
         else if (c === "new-space") newSpaceMenu(null);
+        else if (c === "worktrees") openBoard();
       }
     } catch { /* the copy is closing */ }
   });
@@ -336,6 +338,14 @@ const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}~/]+/u, "").trim();
 
 // The header's fold button: Collapse all when anything is open (every space and worktree space,
 // and the "worktrees without a space" lists), else Expand all (every space and worktree space).
+// The header's button for the Worktrees board (board-dialog.js).
+export function boardButton(t) {
+  return div().id("spaces-board").size(26).flex_none().flex().items_center().justify_center().rounded(6).cursor_pointer()
+    .text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground)).tooltip("Worktrees: every checkout, by ticket")
+    .on_click(() => openBoard())
+    .child(svg(`${ICONS}/folder-tree.svg`).size(14));
+}
+
 export function foldAllButton(v, t) {
   const any = v.openSpaces.size > 0 || v.unfolded.size > 0;
   return div().id("spaces-fold-all").size(26).flex_none().flex().items_center().justify_center().rounded(6).cursor_pointer()
