@@ -3,7 +3,7 @@
 // Run: cd tests && npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { keyOf, parseHeads, upstreamBranch, judge, groupByTicket, parsePrunable } from "../herdr-ranch-spaces/mods/herdr-ranch-spaces/board.js";
+import { keyOf, parseHeads, upstreamBranch, judge, groupByTicket, parsePrunable, agentsFor, ticketDone } from "../herdr-ranch-spaces/mods/herdr-ranch-spaces/board.js";
 
 const NOW = 1_800_000_000, DAY = 86400;
 const base = { isMain: false, branch: "TASS-1", changes: 0, unpushed: 0, upstream: "origin/TASS-1", gone: false, own: 2, head: "abc", at: NOW - DAY, pr: null, defaultShort: "main" };
@@ -75,4 +75,27 @@ test("groupByTicket: one ticket across repositories, keyless branches alone, mai
 test("parsePrunable: the registrations git would prune", () => {
   assert.deepEqual(parsePrunable("Removing worktrees/x: gitdir file points to non-existent location\n\n"), ["Removing worktrees/x: gitdir file points to non-existent location"]);
   assert.deepEqual(parsePrunable(""), []);
+});
+
+test("agentsFor: agents in the checkout's space, or working in its folder from anywhere; most urgent first", () => {
+  const all = [
+    { path: "/src/web", on: null }, { path: "/w/web/T-1", on: null, space: "s1" }, { path: "/w/web/T-2", on: null, space: null },
+  ];
+  const places = [
+    { name: "Codex", space: "s1", cwd: "/elsewhere", machine: null, status: "idle" },
+    { name: "Claude", space: "s9", cwd: "/w/web/T-1/src", machine: null, status: "blocked" },
+    { name: "Main", space: "s0", cwd: "/src/web", machine: null, status: "working" },
+    { name: "Remote", space: "s8", cwd: "/w/web/T-1", machine: "box", status: "working" },
+  ];
+  assert.deepEqual(agentsFor(all[1], places, all).map((a) => a.name), ["Claude", "Codex"]);
+  assert.deepEqual(agentsFor(all[2], places, all), []);
+  assert.deepEqual(agentsFor(all[0], places, all).map((a) => a.name), ["Main"]);
+});
+
+test("ticketDone: every worktree of the ticket ready, none held by an agent", () => {
+  const r = (path, ready, isMain = false) => ({ path, isMain, judged: { ready } });
+  assert.equal(ticketDone({ checkouts: [r("/a", true), r("/b", true), r("/m", false, true)] }), true);
+  assert.equal(ticketDone({ checkouts: [r("/a", true), r("/b", false)] }), false);
+  assert.equal(ticketDone({ checkouts: [r("/a", true), r("/b", true)] }, (c) => c.path === "/b"), false);
+  assert.equal(ticketDone({ checkouts: [r("/m", false, true)] }), false);
 });

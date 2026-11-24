@@ -3,10 +3,11 @@
 // work to commit or push, a pull request, or nothing (ready to clean up). The pure parts are
 // tested in tests/spaces.test.mjs; board-dialog.js draws it.
 
-import { exec, spaces, panes, home } from "herdr";
+import { exec, spaces, panes, home, shared, setShared, checking } from "herdr";
 import { place, probe, worktrees, worktreesWithWork, repoName, mainOf } from "./git.js";
 import { linkOf, detectGithub } from "./links.js";
 import { accountOf, ghAs, ghUserOf } from "./accounts.js";
+import { agentPlaces, PLACES } from "./agents-at.js";
 
 const DAY = 86400;
 export const STALE_DAYS = 14;
@@ -84,6 +85,56 @@ export function groupByTicket(checkouts) {
 
 // `git worktree prune --dry-run --verbose` lines: the registrations whose folder is gone.
 export const parsePrunable = (text) => (text ?? "").split("\n").map((l) => l.trim()).filter((l) => /^Removing /.test(l));
+
+// The agents a clean-up would end or strand: those in the checkout's space (closing it ends them)
+// and those working in its folder from any space (the deepest checkout holding their folder).
+// `places`: agentPlaces(); `all`: every checkout read (to find the deepest). Most urgent first.
+const URGENCY = { blocked: 0, working: 1, done: 2, idle: 3 };
+export function agentsFor(c, places, all) {
+  const deepest = (cwd) => all.filter((d) => (d.on ?? null) === (c.on ?? null) && cwd && inside(cwd, d.path)).sort((a, b) => b.path.length - a.path.length)[0];
+  return (places ?? []).filter((a) => (c.space && a.space === c.space) || ((a.machine ?? null) === (c.on ?? null) && deepest(a.cwd)?.path === c.path))
+    .sort((a, b) => (URGENCY[a.status] ?? 9) - (URGENCY[b.status] ?? 9));
+}
+export const livePlaces = () => agentPlaces(panes(), spaces(), shared(PLACES) ?? {});
+
+// The tickets whose every worktree is ready (main checkouts aside): Clean up ticket takes them all.
+export const ticketDone = (g, blocked = () => false) => {
+  const trees = g.checkouts.filter((c) => !c.isMain);
+  return trees.length > 0 && trees.every((c) => c.judged.ready && !blocked(c));
+};
+
+// How many checkouts are ready to clean up (no agent in them), for the Spaces header's badge:
+// kept in shared("spaces.board.ready") as { count, at } by the board and by readAll().
+export const READY_KEY = "spaces.board.ready";
+export function noteReady(checkouts) {
+  const places = livePlaces();
+  const count = checkouts.filter((c) => c.judged.ready && !agentsFor(c, places, checkouts).length).length;
+  setShared(READY_KEY, { count, at: Date.now() });
+  return count;
+}
+
+// Every repository read, three at a time (each runs several git reads per checkout, and a crowd
+// of them can run past exec's 30 s). `each(repo, read)` as each one finishes.
+export async function readAll(repos, each = () => {}) {
+  const queue = [...repos], out = [];
+  await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
+    for (let r = queue.shift(); r; r = queue.shift()) {
+      let read;
+      try { read = await readRepo(r); } catch (e) { read = { ...r, checkouts: [], prunable: [], error: String(e?.message ?? e) }; }
+      out.push(read); each(r, read);
+    }
+  }));
+  return out;
+}
+
+// The badge's count, read in the background every half hour (not while Herdr checks the mod).
+export async function watchReady(sleep) {
+  if (checking()) return;
+  for (;;) {
+    try { const read = await readAll(await findRepos()); noteReady(read.flatMap((r) => r.checkouts)); } catch { /* next time */ }
+    await sleep(30 * 60_000);
+  }
+}
 
 // ---- reading -------------------------------------------------------------------------------
 

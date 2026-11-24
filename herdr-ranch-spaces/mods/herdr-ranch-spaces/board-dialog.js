@@ -10,7 +10,8 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { props, closeOverlay, theme, spaces, exec, run, home } from "herdr";
-import { findRepos, readRepo, groupByTicket, leftovers, cleanupPlan, cleanUp, startTicket, titleSource, keyOf } from "./board.js";
+import { findRepos, readAll, groupByTicket, leftovers, cleanupPlan, cleanUp, startTicket, titleSource, keyOf, agentsFor, livePlaces, ticketDone, noteReady } from "./board.js";
+import { STATUS_WORD } from "./agents-at.js";
 import { lookup } from "./issues.js";
 import { openUrl } from "./links.js";
 import { accountOf, argvAs, launchAs } from "./accounts.js";
@@ -60,13 +61,8 @@ export class BoardDialog extends View {
           this.busy = "";
         }
         cx.notify();
-        // Three repositories at a time: each runs several git reads per checkout, and a crowd of
-        // them can run past exec's 30 s.
-        const queue = [...this.repos];
-        await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
-          for (let r = queue.shift(); r; r = queue.shift()) try { this.read.set(r.main + "\0" + (r.on ?? ""), await readRepo(r)); } catch (e) { this.read.set(r.main + "\0" + (r.on ?? ""), { ...r, checkouts: [], prunable: [], error: String(e?.message ?? e) }); }
-          finally { cx.notify(); }
-        }));
+        await readAll(this.repos, (r, read) => { this.read.set(r.main + "\0" + (r.on ?? ""), read); cx.notify(); });
+        noteReady(this.checkouts());
         this.left = await leftovers(this.checkouts().map((c) => c.path));
         this.loadTitles(cx);
       } catch (e) { this.error = String(e?.message ?? e); }
@@ -77,7 +73,10 @@ export class BoardDialog extends View {
 
   checkouts() { return [...this.read.values()].flatMap((r) => r.checkouts ?? []); }
   ready() { return this.checkouts().filter((c) => c.judged.ready); }
-  chosen() { return this.ready().filter((c) => !this.unpicked.has(c.path)); }
+  // The agents in a checkout or its space, read fresh each time (they come and go).
+  agents(c) { return agentsFor(c, this.places ?? [], this.checkouts()); }
+  // Ticked, without an agent in it, and in the chosen ticket when Clean up ticket chose one.
+  chosen() { return this.ready().filter((c) => !this.unpicked.has(c.path) && !this.agents(c).length && (!this.only || this.only.has(c.path))); }
 
   // Ticket titles from the linked tracker, remembered between openings.
   loadTitles(cx) {
@@ -128,7 +127,7 @@ export class BoardDialog extends View {
           await cleanUp(c);
         } catch (e) { failed.push(`${c.repo}/${c.branch}: ${e?.message ?? e}`); }
       }
-      this.busy = ""; this.view = "board";
+      this.busy = ""; this.view = "board"; this.only = null;
       this.done = `Cleaned up ${list.length - failed.length} of ${list.length}.`;
       this.error = failed.join("\n");
       this.read.clear();
@@ -174,7 +173,7 @@ export class BoardDialog extends View {
   }
 
   key(e, cx) {
-    if (e.key === "escape") { if (this.view !== "board" && !this.busy) { this.view = "board"; this.error = ""; cx.notify(); } else this.close(); }
+    if (e.key === "escape") { if (this.view !== "board" && !this.busy) { this.view = "board"; this.only = null; this.error = ""; cx.notify(); } else this.close(); }
     else if (e.key === "enter" && this.view === "confirm") this.cleanUpChosen(cx);
     else return;
     cx.stop_propagation();
@@ -182,6 +181,7 @@ export class BoardDialog extends View {
 
   render() {
     const t = theme();
+    this.places = livePlaces();
     const body = this.view === "confirm" ? this.confirmView(t) : this.view === "start" ? this.startView(t) : this.boardView(t);
     return v_flex().id("spaces-board").track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx)).size_full().p(16).gap(10).bg(t.popover).text_size(13)
       .child(this.header(t))
@@ -244,16 +244,17 @@ export class BoardDialog extends View {
     const list = v_flex().id("board-list").flex_1().min_h(0).overflow_y_scrollbar().gap(4).pr(4);
 
     if (ready.length) {
-      list.child(this.section(t, `READY TO CLEAN UP · ${ready.length}`, this.button("board-clean", `Clean up ${chosen}…`, (cx) => { this.view = "confirm"; cx.notify(); }, { primary: true, enabled: chosen > 0 && !this.busy })));
+      list.child(this.section(t, `READY TO CLEAN UP · ${ready.length}`, this.button("board-clean", `Clean up ${chosen}…`, (cx) => { this.only = null; this.view = "confirm"; cx.notify(); }, { primary: true, enabled: chosen > 0 && !this.busy })));
       for (const c of ready) {
-        const on = !this.unpicked.has(c.path);
-        list.child(h_flex().id(`ready-${c.path}`).flex_none().min_h(30).px(8).gap(8).items_center().rounded(6).cursor_pointer().hover((s) => s.bg(t.hover))
-          .on_click((_e, cx) => { if (on) this.unpicked.add(c.path); else this.unpicked.delete(c.path); cx.notify(); })
+        const ag = this.agents(c), held = ag.length > 0, on = !held && !this.unpicked.has(c.path);
+        list.child(h_flex().id(`ready-${c.path}`).flex_none().min_h(30).px(8).gap(8).items_center().rounded(6)
+          .when(!held, (el) => el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => { if (on) this.unpicked.add(c.path); else this.unpicked.delete(c.path); cx.notify(); }))
           .child(this.check(t, on))
           .child(div().flex_none().text_color(t.muted).child(c.repo))
           .child(div().flex_none().text_color(t.foreground).child(c.branch))
           .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.dim).child(c.judged.reason))
-          .when(Boolean(c.space), (el) => el.child(div().flex_none().text_size(11).text_color(t.accent).child("space open"))));
+          .when(held, (el) => el.child(div().flex_none().text_size(11).text_color(t.ansi3).child(`${ag[0].name} ${STATUS_WORD[ag[0].status] ?? ag[0].status} in it: close it first`)))
+          .when(!held && Boolean(c.space), (el) => el.child(div().flex_none().text_size(11).text_color(t.accent).child("space open"))));
       }
     }
 
@@ -287,6 +288,11 @@ export class BoardDialog extends View {
         .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(title ?? ""))
         .when(Boolean(pr), (el) => el.child(div().id(`pr-${g.key}`).flex_none().px(6).rounded(4).border_1().border_color(prColor).text_size(11).text_color(prColor).cursor_pointer()
           .tooltip(pr.title).on_click(() => openUrl(pr.url)).child(`PR #${pr.number} ${pr.state.toLowerCase()}`)))
+        .when(ticketDone(g, (c) => this.agents(c).length > 0) && g.checkouts.filter((c) => !c.isMain).length > 1, (el) => el.child(this.button(`done-${g.key}`, "Clean up ticket…", (cx) => {
+          this.only = new Set(g.checkouts.filter((c) => !c.isMain).map((c) => c.path));
+          for (const p of this.only) this.unpicked.delete(p);
+          this.view = "confirm"; cx.notify();
+        }, { enabled: !this.busy })))
         .child(div().flex_none().text_size(11).text_color(t.dim).child(ago(g.at))))
       .child(h_flex().flex_wrap().gap(6).children(g.checkouts.map((c) => this.chip(t, c))))
       .when(flags.length > 0, (el) => el.children(flags.map((f) => div().text_size(12).text_color(t.ansi3).child(`⚠ ${f}`))));
@@ -294,12 +300,14 @@ export class BoardDialog extends View {
 
   chip(t, c) {
     const tone = c.judged.ready ? t.ansi2 : c.judged.tone === "warn" ? t.ansi3 : t.border;
-    const tip = [tilde(c.path), c.branch ? `branch ${c.branch}` : "detached", c.upstream ? `→ ${c.upstream}${c.gone ? " (gone)" : ""}` : "no upstream", c.judged.reason, c.space ? "click: show its space" : "click: open a space here"].filter(Boolean).join("\n");
+    const tip = [tilde(c.path), ...this.agents(c).map((a) => `${a.name} ${STATUS_WORD[a.status] ?? a.status} (${a.spaceName || "a space"})`), c.branch ? `branch ${c.branch}` : "detached", c.upstream ? `→ ${c.upstream}${c.gone ? " (gone)" : ""}` : "no upstream", c.judged.reason, c.space ? "click: show its space" : "click: open a space here"].filter(Boolean).join("\n");
     return h_flex().id(`chip-${c.path}`).flex_none().gap(6).items_center().h(24).px(8).rounded(6).border_1().border_color(tone).cursor_pointer()
       .hover((s) => s.bg(t.hover)).tooltip(tip).on_click(() => this.openCheckout(c))
       .child(svg(c.space ? CHROME("git-compare") : `${ICONS}/unplug.svg`).size(12).text_color(c.space ? t.accent : t.dim))
       .child(div().text_size(12).text_color(t.foreground).child(c.isMain ? `${c.repo} (main checkout)` : c.repo))
-      .child(this.work(t, c));
+      .child(this.work(t, c))
+      .when(this.agents(c).length > 0, (el) => { const ag = this.agents(c), col = { blocked: t.ansi3, done: t.ansi2, working: t.accent }[ag[0].status] ?? t.dim;
+        return el.child(h_flex().gap(3).items_center().child(svg(`${ICONS}/bot.svg`).size(12).text_color(col)).when(ag.length > 1, (e) => e.child(div().text_size(11).text_color(col).child(String(ag.length))))); });
   }
 
   confirmView(t) {
@@ -311,7 +319,7 @@ export class BoardDialog extends View {
           .child(h_flex().gap(8).child(div().text_color(t.muted).child(c.repo)).child(div().text_color(t.foreground).child(c.branch)).child(div().text_size(12).text_color(t.dim).child(c.judged.reason)))
           .child(div().text_size(12).text_color(t.dim).child(cleanupPlan(c, this.spaceName(c.space)).join(" · "))))))
       .child(h_flex().justify_end().gap(8)
-        .child(this.button("board-confirm-cancel", "Back  esc", (cx) => { this.view = "board"; cx.notify(); }, { enabled: !this.busy }))
+        .child(this.button("board-confirm-cancel", "Back  esc", (cx) => { this.view = "board"; this.only = null; cx.notify(); }, { enabled: !this.busy }))
         .child(this.button("board-confirm-go", this.busy ? "Cleaning up…" : `Clean up ${list.length}  ↵`, (cx) => this.cleanUpChosen(cx), { primary: true, danger: true, enabled: !this.busy && list.length > 0 })));
   }
 

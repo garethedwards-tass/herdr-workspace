@@ -15,6 +15,7 @@ import { NewSpaceDialog } from "./new-space.js";
 import { RemoveDialog } from "./remove.js";
 import { GitDialog } from "./git-dialog.js";
 import { BoardDialog } from "./board-dialog.js";
+import { READY_KEY, watchReady } from "./board.js";
 import { accounts, accountOf, accountColor, accountLetter, accountParts, defaultLabel, defaultBadge } from "./accounts.js";
 import { openNew, openGit, openBoard, ICONS } from "./actions.js";
 import { base, checkoutAt, hasWork } from "./git.js";
@@ -61,6 +62,8 @@ export function start(v, cx) {
   cx.spawn(async (cx) => {
     try { for (;;) { readLanes(v, () => cx.notify()); await cx.sleep(LANES_TICK); } } catch { /* the copy is closing */ }
   });
+  // The Worktrees button's ready-to-clean-up count, read again every half hour.
+  cx.spawn(async (cx) => { try { await watchReady((ms) => cx.sleep(ms)); } catch { /* the copy is closing */ } });
   cx.spawn(async () => {
     try {
       for (;;) {
@@ -341,9 +344,13 @@ const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}~/]+/u, "").trim();
 // The header's button for the Worktrees board (board-dialog.js).
 export function boardButton(t) {
   return div().id("spaces-board").size(26).flex_none().flex().items_center().justify_center().rounded(6).cursor_pointer()
-    .text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground)).tooltip("Worktrees: every checkout, by ticket")
+    .text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground))
+    .tooltip((shared(READY_KEY)?.count ?? 0) > 0 ? `Worktrees: ${shared(READY_KEY).count} ready to clean up` : "Worktrees: every checkout, by ticket")
     .on_click(() => openBoard())
-    .child(svg(`${ICONS}/folder-tree.svg`).size(14));
+    .child(svg(`${ICONS}/folder-tree.svg`).size(14))
+    // The ready-to-clean-up count (board.js keeps it), as a small dot with the number.
+    .when((shared(READY_KEY)?.count ?? 0) > 0, (el) => el.relative().child(div().absolute().top(1).right(0).min_w(13).h(13).px(3).rounded_full().bg(t.ansi2)
+      .flex().items_center().justify_center().text_size(9).font_semibold().text_color(t.background).child(String(shared(READY_KEY).count))));
 }
 
 export function foldAllButton(v, t) {

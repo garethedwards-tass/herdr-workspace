@@ -4,7 +4,7 @@ Versions of the Herdr Ranch suite: the Issues, Pull requests and Reviews mods an
 
 ## Unreleased
 
-- **Worktrees board** (Spaces: the folder-tree button in its header): every worktree of every repository, grouped by ticket across repositories, with Jira titles and pull requests. It finds the ones ready to clean up (merged, or no work of their own) and removes them with their branch and space in one go, tidies empty folders, flags a main checkout off main and branches pushing under another name, and makes one ticket's worktree in several repositories at once.
+- **Worktrees board** (Spaces: the folder-tree button in its header): every worktree of every repository, grouped by ticket across repositories, with Jira titles and pull requests. It finds the ones ready to clean up (merged, or no work of their own) and removes them with their branch and space in one go, tidies empty folders, flags a main checkout off main and branches pushing under another name, and makes one ticket's worktree in several repositories at once. Its button counts the worktrees ready to clean up; a worktree an agent is in is never cleaned up; a ticket whose worktrees are all done cleans up in one go.
 
 ## v0.6.0
 
