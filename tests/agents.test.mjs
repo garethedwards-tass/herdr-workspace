@@ -62,7 +62,7 @@ test("pickSession, subagentOf, windows, names and paths", () => {
   assert.equal(utf8Length("a·€😀"), 1 + 2 + 3 + 4);
 });
 
-import { keysFor, promptText, runningAgents, stopOffered, busyTitle, busyScreen, vimInsert, resumeArgs, helpArity, envVar, setupFor, scriptFor , restartOffered, restartInMenu, exitOffered, agentEntry, recordsCoverFooter } from "../herdr-ranch-agents/mods/herdr-ranch-agents/revive.js";
+import { keysFor, promptText, subagentsRunning, stopOffered, busyTitle, busyScreen, vimInsert, resumeArgs, helpArity, envVar, setupFor, scriptFor , restartOffered, restartInMenu, exitOffered, agentEntry } from "../herdr-ranch-agents/mods/herdr-ranch-agents/revive.js";
 
 test("revive: typable keys, the prompt, background agents, /stop, busy, vim", () => {
   assert.deepEqual(keysFor("sh /Users/a.b/x-1=2"), ["s", "h", "space", "/", "shift+u", "s", "e", "r", "s", "/", "a", ".", "b", "/", "x", "-", "1", "=", "2"]);
@@ -72,8 +72,6 @@ test("revive: typable keys, the prompt, background agents, /stop, busy, vim", ()
   assert.equal(promptText(screen), "carry on with both");
   assert.equal(promptText("❯ \n"), "");
   assert.equal(promptText("no prompt"), null);
-  assert.equal(runningAgents(screen), true);
-  assert.equal(runningAgents("❯ x\n  ⏵⏵ auto mode on · PR #2"), false);
   assert.equal(stopOffered("❯ /stop\n  ❯ /stop      Stop this background session; transcript and worktree are kept"), true);
   assert.equal(stopOffered("  ❯ /status   Show status"), false);
   assert.equal(busyTitle("◑ ACME-1 fix"), true);
@@ -196,13 +194,11 @@ test("menu matches stay on one line: the typed prompt with padding or a blank li
   assert.ok(exitOffered("❯ /exit\n──\n  ❯ /exit      Exit the REPL"));
 });
 
-test("recordsCoverFooter: the records clear a running footer only when they cover it", () => {
-  const screen = "x\n  ← 2 agents";
-  assert.equal(recordsCoverFooter([], screen), false);
-  assert.equal(recordsCoverFooter([{ done: true }], screen), false); // fewer records than the footer counts
-  assert.equal(recordsCoverFooter([{ done: true }, { done: true }], screen), true);
-  assert.equal(recordsCoverFooter([{ done: true }, { done: false }], screen), false);
-  assert.equal(recordsCoverFooter(null, screen), false);
+test("subagentsRunning: by the session's records, never the footer's machine-wide count", () => {
+  assert.equal(subagentsRunning([]), false);
+  assert.equal(subagentsRunning(null), false);
+  assert.equal(subagentsRunning([{ done: true }]), false);
+  assert.equal(subagentsRunning([{ done: true }, { done: false }]), true);
 });
 
 test("byAccount: agents by their space's account, else their repository's; a removed account shows all", () => {

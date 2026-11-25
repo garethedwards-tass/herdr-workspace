@@ -44,13 +44,10 @@ export function promptText(screen) {
 
 const bottom = (screen, n = 5) => (screen ?? "").split("\n").slice(-n).join("\n");
 
-// Whether a background agent of the session is still running (the status bar's "← 2 agents").
-export const runningAgents = (screen) => /← \d+ agents?\b/.test(bottom(screen));
-export const footerAgents = (screen) => Number(/← (\d+) agents?\b/.exec(bottom(screen))?.[1] ?? 0);
-// Whether the session's own records say every background agent the footer counts has finished:
-// only when there are records, all done, and at least as many as the footer shows (the watcher
-// keeps the newest 8, and none when they couldn't be read).
-export const recordsCoverFooter = (subs, screen) => Array.isArray(subs) && subs.length > 0 && subs.length >= footerAgents(screen) && subs.every((x) => x.done);
+// Whether a subagent of the session is still running, by the session's own records (claude.js
+// subagents). Not the footer's "← n agents": that counts background sessions anywhere on the
+// computer, so any one of them would block every restart.
+export const subagentsRunning = (subs) => Array.isArray(subs) && subs.some((x) => !x.done);
 
 // Whether Claude Code is working: "esc to interrupt" in its status bar, or a spinner glyph leading
 // its title (✳ when it waits). Either one is enough to leave it alone.
@@ -286,10 +283,7 @@ export async function revive(t, session, cx, restart = false) {
   // From here on the terminal is touched: look before each key.
   const screen = await read(t);
   if (busyTitle(g.title) || busyScreen(screen)) return "It looks busy: try again when it's done.";
-  // Claude Code's footer ("← 1 agent") keeps finished background agents too: a restart goes by the
-  // session's own records (claude.js subagents) when it has them.
-  const recordsIdle = restart && recordsCoverFooter(session.subs, screen);
-  if (runningAgents(screen) && !recordsIdle) return "A background agent of that session is still running: try again when it's done.";
+  if (subagentsRunning(session.subs)) return "A subagent of that session is still running: try again when it's done.";
   if (vim && !vimInsert(screen)) return "Its prompt uses vim keys and isn't in insert mode: press i there, then try again.";
   // A typed draft stays when a key is added; Claude Code's suggested reply is replaced.
   await keys(t, ["x"]);
