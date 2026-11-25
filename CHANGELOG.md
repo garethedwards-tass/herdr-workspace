@@ -4,6 +4,7 @@ Versions of the Herdr Ranch suite: the Issues, Pull requests and Reviews mods an
 
 ## Unreleased
 
+- **Agents: resume after a restart.** A Claude Code session that a reboot or a herdr-core restart took from its terminal comes back there by itself, on the same conversation and as the account it ran as. A session you end yourself (`/exit`, Ctrl+C) is forgotten. An automatic resume leaves out options that lift approvals or load settings (`--dangerously-skip-permissions`, `--settings`, …) and says so. A shell that has been open a while, or a resume that failed, gets a **Resume** button on its row instead. The agent menu turns it off per terminal. No hooks or shell changes: the record is labels on the terminal. Inspired by [dmazlum/herdr-revive](https://github.com/dmazlum/herdr-revive), which covers more agents and adds forking.
 - **Worktrees board** (Spaces: the folder-tree button in its header): every worktree of every repository, grouped by ticket across repositories, with Jira titles and pull requests. It finds the ones ready to clean up (merged, or no work of their own) and removes them with their branch and space in one go, tidies empty folders, flags a main checkout off main and branches pushing under another name, and makes one ticket's worktree in several repositories at once. Its button counts the worktrees ready to clean up; a worktree an agent is in is never cleaned up; a ticket whose worktrees are all done cleans up in one go.
 
 ## v0.6.0

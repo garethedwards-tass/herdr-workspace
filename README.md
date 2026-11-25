@@ -79,7 +79,7 @@ Herdr's spaces list with git, links and accounts, in the sidebar of the mod-butt
 
 ## Agents
 
-Herdr's agents list with Claude Code's own records, in the sidebar of the mod-buttons layout: the context each Claude Code agent uses, a popup with its model, usage, tasks and subagents, and its task list and running subagents under its row. An agent that stopped reporting its status still shows, with a warning and **Bring back**, which restarts its Claude Code session in place, as the same account. See its [RECIPE.md](herdr-ranch-agents/RECIPE.md).
+Herdr's agents list with Claude Code's own records, in the sidebar of the mod-buttons layout: the context each Claude Code agent uses, a popup with its model, usage, tasks and subagents, and its task list and running subagents under its row. An agent that stopped reporting its status still shows, with a warning and **Bring back**, which restarts its Claude Code session in place, as the same account. After a reboot or a herdr-core restart, each Claude Code session comes back in its terminal by itself, on the same conversation and account; a session you exited yourself stays gone (like [herdr-revive](https://github.com/dmazlum/herdr-revive), for Claude Code, with no hooks). See its [RECIPE.md](herdr-ranch-agents/RECIPE.md).
 
 ## Usage
 

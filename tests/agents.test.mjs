@@ -245,3 +245,60 @@ test("prices: the longest key a model starts with sets its price; the cost count
   assert.equal(costOf(null, prices["gpt-6"]), null);
   assert.equal(costOf({ input: 1 }, null), null);
 });
+
+// Resume after a restart (resume.js).
+import { readRecord, recordLabels, etimeMs, autoArgs, emptyPrompt, decide, resumeScript } from "../herdr-ranch-agents/mods/herdr-ranch-agents/resume.js";
+import { STATIC } from "../herdr-ranch-agents/mods/herdr-ranch-agents/revive.js";
+
+test("resume: a record survives its labels, and junk args are refused", () => {
+  const labels = Object.fromEntries(recordLabels({ id: "abc-1", config: "/Users/test/.claude", cwd: "/w", args: ["--model", "opus"], account: null, shell: 42, since: "Wed 25 Nov 14:36:17 2026", at: 5 }).map((kv) => [kv.slice(0, kv.indexOf("=")), kv.slice(kv.indexOf("=") + 1)]).filter(([, v]) => v));
+  const r = readRecord(labels);
+  assert.deepEqual([r.id, r.config, r.cwd, r.args, r.account, r.shell, r.at, r.resumed, r.auto], ["abc-1", "/Users/test/.claude", "/w", ["--model", "opus"], null, "42", 5, null, true]);
+  assert.equal(readRecord({ ...labels, "ranch.resume.args": '[1,"x"]' }).args, null);
+  assert.equal(readRecord({ ...labels, "ranch.resume.auto": "off" }).auto, false);
+  assert.equal(readRecord({ where: "x" }), null);
+});
+
+test("resume: etime", () => {
+  assert.equal(etimeMs("   01:05"), 65_000);
+  assert.equal(etimeMs("02:00:01"), 7_201_000);
+  assert.equal(etimeMs("1-00:00:00"), 86_400_000);
+  assert.equal(etimeMs("soon"), null);
+});
+
+test("resume: an automatic resume leaves out options that lift approvals or load settings", () => {
+  const { args, dropped } = autoArgs(["--model", "opus", "--dangerously-skip-permissions", "--permission-mode", "bypassPermissions", "--settings", "x.json", "--add-dir", "/a", "/b"], STATIC);
+  assert.deepEqual(args, ["--model", "opus"]);
+  assert.deepEqual(dropped, ["--dangerously-skip-permissions", "--permission-mode bypassPermissions", "--settings x.json", "--add-dir /a /b"]);
+  assert.deepEqual(autoArgs(["--permission-mode=plan"], STATIC).args, ["--permission-mode=plan"]);
+});
+
+test("resume: an empty prompt takes a typed x and nothing else", () => {
+  assert.ok(emptyPrompt("last\n➜  tassdocker git:(main)\n\n", "last\n➜  tassdocker git:(main) x\n"));
+  assert.ok(emptyPrompt("% ", "% x"));
+  assert.ok(emptyPrompt("❯            main", "❯ x          main"));
+  assert.ok(!emptyPrompt("% ", "% "));
+  assert.ok(!emptyPrompt("% ", "%\nx"));
+});
+
+test("resume: same shell forgets after a while, a new shell resumes, an old one waits for a click", () => {
+  const rec = { id: "a", shell: "10", since: "S", auto: true, failed: null, resumed: null };
+  const g = (pid, fg = pid) => ({ state: "live", pid, foreground: { pid: fg } });
+  assert.equal(decide(rec, g(10, 11), "S", 0, 100_000, null), null); // something in front
+  assert.equal(decide(rec, g(10), "S", 0, 100_000, null), "gone");
+  assert.equal(decide(rec, g(10), "S", 0, 100_000, 80_000), "forget");
+  assert.equal(decide({ ...rec, resumed: 90_000 }, g(10), "S", 0, 100_000, 0), null);
+  assert.equal(decide(rec, g(20), "T", 30_000, 100_000, null), "resume");
+  assert.equal(decide(rec, g(10), "T", 30_000, 100_000, null), "resume"); // a reused pid, a new start
+  assert.equal(decide(rec, g(20), "T", 3_600_000, 100_000, null), "lost");
+  assert.equal(decide({ ...rec, auto: false }, g(20), "T", 1000, 100_000, null), "lost");
+  assert.equal(decide({ ...rec, failed: 1 }, g(20), "T", 1000, 100_000, null), "lost");
+});
+
+test("resume: the script quotes everything and says what it left out", () => {
+  const s = resumeScript({ cwd: "/w/it's", setup: "unset CLAUDE_CONFIG_DIR", args: ["--model", "opus", "--resume", "abc"], id: "abcdef1234", dropped: ["--dangerously-skip-permissions"] });
+  assert.match(s, /cd '\/w\/it'\\''s' \|\| exit 1/);
+  assert.match(s, /exec claude '--model' 'opus' '--resume' 'abc'/);
+  assert.match(s, /'abcdef12'/);
+  assert.match(s, /without %s.*'--dangerously-skip-permissions'/);
+});

@@ -7,6 +7,7 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { openOverlay, closeOverlay, agents, terminals, home, shared, setShared, panes, spaces, run, notify, hc, setBadge, checking } from "herdr";
 import { bringBack } from "./revive.js";
+import { remember, watchRecords, startResume, autoOn, setAuto } from "./resume.js";
 import { accounts, accountOf, defaultLabel } from "./accounts.js";
 import { worktreeProps, worktreeLines, WORKTREE_H } from "./worktree.js";
 import { isCodex, refreshCodex, codexSnapshot, codexModel, codexShort, restartCodexAgent } from "./codex.js";
@@ -59,6 +60,7 @@ export function start(v, cx) {
   v.claude = new Map(); // agent address -> { id, file, dir, st, offset, subs, read, started }
   v.openTasks = new Set();
   v.reviving = new Set(); // agents being brought back (revive.js)
+  v.lost = new Map(); // terminals whose session a restart took, waiting for a click (resume.js)
   v.seenRestart = shared(KEY_RESTART)?.at ?? 0;
   v.instance = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; // claims a Restart ask
   v.sessions = []; v.sessionsAt = 0;
@@ -68,6 +70,8 @@ export function start(v, cx) {
     v.reading = true;
     cx.spawn(async (cx) => {
       try { if (await refresh(v)) cx.notify(); } catch { /* next tick */ }
+      // Resume after a restart (resume.js): remember each session, bring back the ones a restart took.
+      if (!checking()) try { const all = terminals(); await remember(v, all); await watchRecords(v, cx, all); } catch { /* next tick */ }
       // Codex agents (codex.js): their conversation, model and context.
       try { const all = terminals(); if (await refreshCodex(v, liveAgents(agents(), all).filter(isCodex), all)) cx.notify(); } catch { /* next tick */ }
       // Antigravity agents (antigravity.js): their conversation, model and context.
@@ -186,7 +190,9 @@ export function openAgentMenu(v, a) {
   // Codex and Antigravity: one whose conversation was found, and sure of (codex.js, antigravity.js).
   const restart = ((Boolean(c?.id) && isClaude(a)) || (Boolean(x?.id) && x.sure && isCodex(a)) || (Boolean(g?.id) && g.sure && isAgy(a))) && !v.reviving.has(a.address);
   const worktree = worktreeProps(v, a);
-  const props = { stats: s, menu: true, pane: a.pane, name, terminal: a.address, pinned: Boolean(a.pinned), restart, worktree };
+  // Resume after a restart (resume.js): on unless this terminal has it off. Claude Code here only.
+  const resume = isClaude(a) ? autoOn(terminals().find((x) => x.address === a.address)?.labels) : null;
+  const props = { stats: s, menu: true, pane: a.pane, name, terminal: a.address, pinned: Boolean(a.pinned), restart, worktree, resume };
   // As high as the rows it has: a Codex or other agent has fewer than a Claude Code one.
   openOverlay({ mod: MOD, kind: "popup", at: "pointer", width: 280, height: menuHeight(s, props) + (worktree ? WORKTREE_H : 0), props });
 }
@@ -248,12 +254,13 @@ function menuItems(p) {
     p.pane ? { id: "focus", label: "Go to terminal", go: () => run("pane.focus", { pane: p.pane }) } : null,
     p.terminal ? { id: "pin", label: p.pinned ? "Unpin" : "Pin to the top", go: () => run("terminal.pin", { terminal: p.terminal, pinned: !p.pinned }) } : null,
     p.restart ? { id: "restart", label: "Restart", hint: "exit and resume", go: () => setShared(KEY_RESTART, { terminal: p.terminal, at: Date.now() }) } : null,
+    p.resume != null ? { id: "resume-auto", label: p.resume ? "Don't resume after a restart" : "Resume after a restart", go: () => setAuto(p.terminal, !p.resume) } : null,
     s?.session ? { id: "copy-id", label: "Copy session ID", go: (cx) => { cx.write_to_clipboard(s.session); notify({ title: "Copied the session ID", body: s.session, level: "success", timeout: 2500 }); } } : null,
   ].filter(Boolean);
 }
 const ITEM_H = 30;
 // p: the menu's props (default: every row an agent with stats can have).
-export function menuHeight(s, p = { stats: s, pane: true, terminal: true, restart: true }) {
+export function menuHeight(s, p = { stats: s, pane: true, terminal: true, restart: true, resume: true }) {
   const summary = s?.kind === "codex" ? 22 + 20 + (s.window ? 26 : 0) : s ? 22 + 20 + 26 + (s.tasks.length || s.subs.some((x) => !x[2]) ? 20 : 0) + (s.apiError ? 28 : 0) : 22;
   return 12 + summary + 9 + ITEM_H * menuItems(p).length + 10;
 }
@@ -305,6 +312,7 @@ function menuRows(p, t) {
 // a click that brings it back (revive.js). Herdr's own lists and next/previous agent skip it.
 export function quietMark(v, a, t) {
   if (!a.quiet) return null;
+  if (v.lost?.has(a.address) || v.resuming?.has(a.address)) return lostMark(v, a, t);
   const busy = v.reviving?.has(a.address), can = isClaude(a);
   return h_flex().id(`quiet-${a.address}`).flex_none().gap(4).items_center().px(5).h(18).rounded(4)
     .border_1().border_color(t.ansi3 + "66").bg(t.ansi3 + "1a").text_size(12).text_color(t.ansi3)
@@ -314,6 +322,20 @@ export function quietMark(v, a, t) {
       .on_click((_e, cx) => { cx.stop_propagation(); bringBack(v, a, cx); }))
     .child(busy ? svg(SPIN).size(11).flex_none().spin(900) : div().flex_none().font_semibold().child("!"))
     .child(busy ? "Restarting" : can ? "Bring back" : "Quiet");
+}
+
+// On a terminal whose Claude Code session a restart took (resume.js): a click resumes it, with
+// every option it ran with.
+function lostMark(v, a, t) {
+  const busy = v.resuming?.has(a.address), rec = v.lost?.get(a.address);
+  return h_flex().id(`lost-${a.address}`).flex_none().gap(4).items_center().px(5).h(18).rounded(4)
+    .border_1().border_color(t.ansi3 + "66").bg(t.ansi3 + "1a").text_size(12).text_color(t.ansi3)
+    .tooltip(busy ? "Resuming…" : `A restart ended its Claude Code session${rec?.id ? ` ${rec.id.slice(0, 8)}` : ""}.\nClick to resume it here, as the account it ran as.`)
+    .when(!busy, (el) => el.cursor_pointer().hover((s) => s.bg(t.ansi3 + "33"))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); startResume(v, a.address, cx); }))
+    .child(busy ? svg(SPIN).size(11).flex_none().spin(900) : div().flex_none().font_semibold().child("↻"))
+    .child(busy ? "Resuming" : "Resume");
 }
 
 // Rows under a Claude Code agent: its tasks (a summary that unfolds them) and its running subagents.

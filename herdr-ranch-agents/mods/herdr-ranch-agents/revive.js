@@ -89,7 +89,7 @@ export function helpArity(text) {
   }
   return out;
 }
-const STATIC = helpArity(`
+export const STATIC = helpArity(`
   --add-dir <directories...>
   --agent <agent>
   --agents <json-or-file>
@@ -206,7 +206,7 @@ export function setupFor({ configDir, home, named = null, list = [], defaultGh =
   return `export CLAUDE_CONFIG_DIR=${q(configDir)}`;
 }
 
-const q = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
+export const q = (s) => `'${String(s).replace(/'/g, "'\\''")}'`;
 
 export function scriptFor(cwd, setup, args) {
   return [
@@ -229,14 +229,14 @@ async function vimMode(configDir) {
 
 // The installed Claude Code's options, read once.
 let helpRead = null;
-const optionTable = () => (helpRead ??= exec("sh", ["-lc", "claude --help"], { timeout: 15000 })
+export const optionTable = () => (helpRead ??= exec("sh", ["-lc", "claude --help"], { timeout: 15000 })
   .then((r) => { const t = helpArity(r?.stdout ?? ""); return Object.keys(t).length > 20 ? t : STATIC; })
   .catch(() => STATIC));
 
-const get = async (t) => { const r = await hc(["get", t, "--json"]).catch(() => null); try { return r?.code === 0 ? JSON.parse(r.stdout) : null; } catch { return null; } };
-const read = async (t) => (await hc(["read", t]).catch(() => null))?.stdout ?? "";
-const keys = (t, ks) => hc(["keys", t, ...ks]);
-const isClaude = (g) => /(^|\/)claude$/.test(g?.foreground?.argv?.[0] ?? "");
+export const get = async (t) => { const r = await hc(["get", t, "--json"]).catch(() => null); try { return r?.code === 0 ? JSON.parse(r.stdout) : null; } catch { return null; } };
+export const read = async (t) => (await hc(["read", t]).catch(() => null))?.stdout ?? "";
+export const keys = (t, ks) => hc(["keys", t, ...ks]);
+export const isClaude = (g) => /(^|\/)claude$/.test(g?.foreground?.argv?.[0] ?? "");
 
 // The session's entry in `claude agents --json` (by session id, else by process): its kind
 // ("interactive" or "background") and, for a background one, its short id. null when not listed.
